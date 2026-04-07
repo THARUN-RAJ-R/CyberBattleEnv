@@ -1,0 +1,4 @@
+  File "<string>", line 3
+    old = '\
+            ^
+SyntaxError: EOL while scanning string literal

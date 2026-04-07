@@ -1,0 +1,4 @@
+  File "<string>", line 23
+    return MockResp('{\
+                       ^
+SyntaxError: EOL while scanning string literal

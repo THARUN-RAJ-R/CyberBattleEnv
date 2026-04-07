@@ -1,0 +1,4 @@
+reset OK s=200 pos=0
+step/scan OK s=200 reward=0.05
+reset defender OK msg=DEFENDER mode: protect the network from 
+ERROR: HTTP Error 500: Internal Server Error

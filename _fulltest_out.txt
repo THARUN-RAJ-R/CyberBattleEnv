@@ -1,0 +1,165 @@
+======================================================================
+  DUAL-ROLE EVALUATION: 6 SCENARIOS (3 tasks x 2 roles)
+  Same agent evaluates as ATTACKER then DEFENDER on each task
+======================================================================
+
+
+[SCENARIO EASY - ATTACKER ROLE]
+  Role=ATTACKER  Task=EASY    ATTACKER mode: Task=easy. Start at node 
+  ------------------------------------------------------------------
+  TURN SIDE       ACTION                 REWARD  MSG
+  ------------------------------------------------------------------
+  1    ATTACKER   scan(1)                 +0.05  Scanned Web Server: vuln=0.70, p
+  2    ATTACKER   exploit(1)              +0.85  ? Exploit succeeded on Web Serve
+  ------------------------------------------------------------------
+  WINNER=ATTACKER  det=0  turns=2  reward=0.900  SCORE=1.00 (100%)
+
+[SCENARIO EASY - DEFENDER ROLE]
+  Role=DEFENDER  Task=EASY    DEFENDER mode: protect the network from 
+  ------------------------------------------------------------------
+  TURN SIDE       ACTION                 REWARD  MSG
+  ------------------------------------------------------------------
+  1    DEFENDER   monitor(1)              +0.05  [ATT] Scanned Web Server: vuln=0
+  2    DEFENDER   patch(1)                -0.40  Attacker exfiltrated! [ATTACKER 
+  ------------------------------------------------------------------
+  WINNER=ATTACKER  det=1  turns=2  reward=-0.350  SCORE=0.00 (0%)
+
+  ATT [####################] 100%
+  DEF [....................] 0%
+  COMBINED SCORE: 0.50 (50%)
+
+======================================================================
+
+[SCENARIO MEDIUM - ATTACKER ROLE]
+  Role=ATTACKER  Task=MEDIUM  ATTACKER mode: Task=medium. Start at nod
+  ------------------------------------------------------------------
+  TURN SIDE       ACTION                 REWARD  MSG
+  ------------------------------------------------------------------
+  1    ATTACKER   scan(1)                 +0.05  Scanned Web Server: vuln=0.70, p
+  2    ATTACKER   exploit(1)              +0.35  ? Exploit succeeded on Web Serve
+  3    ATTACKER   lateral_move(1)         +0.05  Moved User Workstation ? Web Ser
+  4    ATTACKER   scan(2)                 +0.05  Scanned App Server: vuln=0.35, p
+  5    ATTACKER   exploit(2)              -0.03  ? Exploit failed on App Server (
+  6    ATTACKER   lateral_move(2)         -0.02  App Server not compromised. Use 
+  7    ATTACKER   scan(3)                 -0.02  Node 3 not reachable from positi
+  8    ATTACKER   exploit(3)              -0.02  Database not adjacent to Web Ser
+  9    ATTACKER   lateral_move(3)         -0.02  Database not adjacent.
+  10   ATTACKER   exfiltrate(3)           -0.05  Database not compromised. Cannot
+  11   ATTACKER   scan(1)                 +0.02  Scanned Web Server: vuln=0.70, p
+  12   ATTACKER   exploit(1)              -0.02  Web Server already compromised.
+  13   ATTACKER   lateral_move(1)         -0.01  Already at this node.
+  14   ATTACKER   scan(2)                 +0.05  Scanned App Server: vuln=0.20, p
+  15   ATTACKER   exploit(2)              +0.10  ? Exploit succeeded on App Serve
+  16   ATTACKER   lateral_move(2)         +0.10  Moved Web Server ? App Server
+  17   ATTACKER   scan(3)                 +0.00  Scanned Database: vuln=0.15, pat
+  ------------------------------------------------------------------
+  WINNER=DEFENDER  det=2  turns=17  reward=0.580  SCORE=0.58 (58%)
+
+[SCENARIO MEDIUM - DEFENDER ROLE]
+  Role=DEFENDER  Task=MEDIUM  DEFENDER mode: protect the network from 
+  ------------------------------------------------------------------
+  TURN SIDE       ACTION                 REWARD  MSG
+  ------------------------------------------------------------------
+  1    DEFENDER   monitor(3)              +0.05  [ATT] Scanned Web Server: vuln=0
+  2    DEFENDER   patch(2)                -0.15  [ATT] ? Exploit succeeded on Web
+  3    DEFENDER   restore(1)              +0.05  [ATT] Moved User Workstation ? W
+  4    DEFENDER   monitor(2)              +0.05  [ATT] Scanned App Server: vuln=0
+  5    DEFENDER   patch(3)                +0.05  [ATT] ? Exploit failed on App Se
+  6    DEFENDER   monitor(1)              +0.05  [ATT] App Server not compromised
+  7    DEFENDER   monitor(3)              +0.05  [ATT] Node 3 not reachable from 
+  8    DEFENDER   patch(2)                +0.05  [ATT] Database not adjacent to W
+  9    DEFENDER   restore(1)              +0.05  [ATT] Database not adjacent. | [
+  10   DEFENDER   monitor(2)              +0.05  [ATT] Database not compromised. 
+  11   DEFENDER   patch(3)                +0.05  [ATT] Scripted attacker: all mov
+  12   DEFENDER   monitor(1)              +0.05  [ATT] Scripted attacker: all mov
+  13   DEFENDER   monitor(3)              +0.05  [ATT] Scripted attacker: all mov
+  14   DEFENDER   patch(2)                +0.05  [ATT] Scripted attacker: all mov
+  15   DEFENDER   restore(1)              +0.05  [ATT] Scripted attacker: all mov
+  16   DEFENDER   monitor(2)              +0.05  [ATT] Scripted attacker: all mov
+  17   DEFENDER   patch(3)                +0.05  [ATT] Scripted attacker: all mov
+  18   DEFENDER   monitor(1)              +0.05  [ATT] Scripted attacker: all mov
+  19   DEFENDER   monitor(3)              +0.05  [ATT] Scripted attacker: all mov
+  ------------------------------------------------------------------
+  WINNER=NONE      det=0  turns=19  reward=0.750  SCORE=0.75 (75%)
+
+  ATT [###########.........] 58%
+  DEF [###############.....] 75%
+  COMBINED SCORE: 0.67 (66%)
+
+======================================================================
+
+[SCENARIO HARD - ATTACKER ROLE]
+  Role=ATTACKER  Task=HARD    ATTACKER mode: Task=hard. Start at node 
+  ------------------------------------------------------------------
+  TURN SIDE       ACTION                 REWARD  MSG
+  ------------------------------------------------------------------
+  1    ATTACKER   scan(1)                 +0.05  Scanned Web Server: vuln=0.70, p
+  2    ATTACKER   escalate(0)             +0.07  Privilege escalation on User Wor
+  3    ATTACKER   exploit(1)              -0.03  ? Exploit failed on Web Server (
+  4    ATTACKER   lateral_move(1)         -0.02  Web Server not compromised. Use 
+  5    ATTACKER   scan(2)                 -0.02  Node 2 not reachable from positi
+  6    ATTACKER   escalate(1)             -0.03  Cannot escalate: Web Server not 
+  7    ATTACKER   exploit(2)              -0.02  App Server not adjacent to User 
+  8    ATTACKER   lateral_move(2)         -0.02  App Server not adjacent.
+  9    ATTACKER   exploit(3)              -0.02  Database not adjacent to User Wo
+  10   ATTACKER   lateral_move(3)         -0.02  Database not adjacent.
+  11   ATTACKER   exfiltrate(3)           -0.05  Database not compromised. Cannot
+  12   ATTACKER   scan(1)                 +0.05  Scanned Web Server: vuln=0.10, p
+  13   ATTACKER   escalate(0)             +0.02  Privilege escalation on User Wor
+  14   ATTACKER   exploit(1)              -0.18  ? Exploit failed on Web Server (
+  15   ATTACKER   lateral_move(1)         -0.02  Web Server not compromised. Use 
+  16   ATTACKER   scan(2)                 -0.02  Node 2 not reachable from positi
+  17   ATTACKER   escalate(1)             -0.03  Cannot escalate: Web Server not 
+  18   ATTACKER   exploit(2)              -0.02  App Server not adjacent to User 
+  19   ATTACKER   lateral_move(2)         -0.02  App Server not adjacent.
+  ------------------------------------------------------------------
+  WINNER=NONE      det=2  turns=19  reward=-0.330  SCORE=0.00 (0%)
+
+[SCENARIO HARD - DEFENDER ROLE]
+  Role=DEFENDER  Task=HARD    DEFENDER mode: protect the network from 
+  ------------------------------------------------------------------
+  TURN SIDE       ACTION                 REWARD  MSG
+  ------------------------------------------------------------------
+  1    DEFENDER   monitor(3)              +0.05  [ATT] Scanned Web Server: vuln=0
+  2    DEFENDER   patch(2)                +0.05  [ATT] Privilege escalation on Us
+  3    DEFENDER   isolate(3)              -0.15  [ATT] ? Exploit succeeded on Web
+  4    DEFENDER   restore(1)              +0.05  [ATT] Moved User Workstation ? W
+  5    DEFENDER   block(2)                +0.05  [ATT] Scanned App Server: vuln=0
+  6    DEFENDER   monitor(1)              +0.05  [ATT] Cannot escalate: Web Serve
+  7    DEFENDER   patch(3)                +0.20  [ATT] ? Exploit failed on App Se
+  8    DEFENDER   isolate(2)              +0.05  [ATT] App Server not compromised
+  9    DEFENDER   monitor(3)              +0.05  [ATT] Node 3 not reachable from 
+  10   DEFENDER   patch(2)                +0.05  [ATT] Database is isolated ? can
+  11   DEFENDER   isolate(3)              +0.05  [ATT] Database not adjacent. | [
+  12   DEFENDER   restore(1)              +0.05  [ATT] Cannot escalate: Database 
+  13   DEFENDER   block(2)                +0.05  [ATT] Database not compromised. 
+  14   DEFENDER   monitor(1)              +0.05  [ATT] Scripted attacker: all mov
+  15   DEFENDER   patch(3)                +0.05  [ATT] Scripted attacker: all mov
+  16   DEFENDER   isolate(2)              +0.05  [ATT] Scripted attacker: all mov
+  17   DEFENDER   monitor(3)              +0.05  [ATT] Scripted attacker: all mov
+  18   DEFENDER   patch(2)                +0.05  [ATT] Scripted attacker: all mov
+  19   DEFENDER   isolate(3)              +0.05  [ATT] Scripted attacker: all mov
+  ------------------------------------------------------------------
+  WINNER=NONE      det=1  turns=19  reward=0.900  SCORE=0.90 (90%)
+
+  ATT [....................] 0%
+  DEF [##################..] 90%
+  COMBINED SCORE: 0.45 (45%)
+
+======================================================================
+
+  FINAL DUAL-ROLE RESULTS
+  --------------------------------------------------
+  easy_att     [####################] 100%
+  easy_def     [....................] 0%
+  medium_att   [###########.........] 58%
+  medium_def   [###############.....] 75%
+  hard_att     [....................] 0%
+  hard_def     [##################..] 90%
+  --------------------------------------------------
+  OVERALL DUAL-ROLE SCORE: 0.54 (54%)
+
+  Scenarios passing threshold (40%): 4/6
+
+  STATUS: EXCELLENT - Agent masters both attack and defense!
+======================================================================

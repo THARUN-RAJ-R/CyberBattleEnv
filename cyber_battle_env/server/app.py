@@ -20,6 +20,7 @@ from typing import Any, Dict, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .environment import CyberBattleEnvironment
@@ -190,7 +191,17 @@ def _make_app() -> FastAPI:
 
 # ── Export `app` ──────────────────────────────────────────────────────────────
 # Use openenv-core app if available (WebSocket support), otherwise raw FastAPI.
+
+# We do not use FastAPIs top-level `app=` definition if openenv-core falls back, 
+# but we do expose `app` for standard uvicorn matching.
 app: FastAPI = _openenv_app if _openenv_app is not None else _make_app()
+
+# Mount frontend visuals securely at the end. OpenEnv pings '/' for 200 checks.
+import os
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="frontend")
+
 
 # Ensure the raw-FastAPI routes always exist (openenv-core may not expose /web etc.)
 if _openenv_app is not None:

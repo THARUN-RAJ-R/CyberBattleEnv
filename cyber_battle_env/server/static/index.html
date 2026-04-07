@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberBattleEnv | Simulation Matrix</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Orbitron:wght@500;700&display=swap');
+        
+        :root {
+            --bg: #090a0f;
+            --panel: rgba(16, 20, 30, 0.7);
+            --border: rgba(40, 50, 70, 0.5);
+            --hacker: #ff2e63;
+            --defender: #00d2ff;
+            --text: #c0c6d4;
+            --dim: #54607a;
+            --font-mono: 'Fira Code', monospace;
+            --font-display: 'Orbitron', sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: var(--font-mono);
+            min-height: 100vh;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(255, 46, 99, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 85% 30%, rgba(0, 210, 255, 0.03) 0%, transparent 50%);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(255,255,255,0.3);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .badges { display: flex; gap: 1rem; }
+        .badge {
+            padding: 0.3rem 0.8rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            border: 1px solid var(--border);
+            background: rgba(0,0,0,0.5);
+        }
+        .b-hacker { color: var(--hacker); border-color: rgba(255, 46, 99, 0.3); }
+        .b-defender { color: var(--defender); border-color: rgba(0, 210, 255, 0.3); }
+
+        main {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 1.5rem;
+            padding: 1.5rem;
+            flex: 1;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            font-family: var(--font-display);
+            font-size: 0.9rem;
+            color: #fff;
+            letter-spacing: 1px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Network Topology */
+        .network-grid {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            padding: 2rem;
+        }
+
+        .nodes-container {
+            display: flex;
+            gap: 4rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        .node {
+            width: 140px;
+            height: 140px;
+            background: rgba(20, 25, 40, 0.8);
+            border: 2px solid var(--dim);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .node::after { /* connection line */
+            content: '';
+            position: absolute;
+            right: -4.2rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4rem;
+            height: 2px;
+            background: var(--dim);
+            z-index: -1;
+            transition: all 0.3s;
+        }
+        .node:last-child::after { display: none; }
+
+        .node.compromised {
+            border-color: var(--hacker);
+            box-shadow: 0 0 25px rgba(255, 46, 99, 0.4), inset 0 0 15px rgba(255, 46, 99, 0.2);
+            animation: pulse-red 2s infinite alternate;
+        }
+
+        .node.patched {
+            border-color: var(--defender);
+            box-shadow: 0 0 25px rgba(0, 210, 255, 0.3);
+        }
+
+        .node.isolated {
+            opacity: 0.5;
+            border-style: dashed;
+        }
+
+        .node-icon { font-size: 2.2rem; margin-bottom: 0.5rem; text-shadow: 0 0 10px rgba(255,255,255,0.2);}
+        .node-name { font-weight: 600; font-size: 0.85rem; color: #fff; text-align: center;}
+        
+        .node-stats {
+            margin-top: 0.8rem;
+            width: 80%;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .stat-bar {
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        }
+        .stat-fill { height: 100%; transition: width 0.3s ease; }
+        .sf-vuln { background: #ffa07a; }
+        .sf-patch { background: var(--defender); }
+        .sf-det { background: #ffd700; }
+
+        /* Logs */
+        .logs-container {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+        .log-entry { opacity: 0; animation: fade-in 0.4s forwards; }
+        .log-time { color: var(--dim); margin-right: 0.5rem; }
+        
+        @keyframes fade-in { to { opacity: 1; transform: translateY(0); } from { opacity: 0; transform: translateY(5px); } }
+        @keyframes pulse-red { to { box-shadow: 0 0 35px rgba(255, 46, 99, 0.6), inset 0 0 20px rgba(255, 46, 99, 0.3); } }
+
+        /* Legend */
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            font-size: 0.75rem;
+            display: flex;
+            gap: 15px;
+            color: var(--dim);
+        }
+        .len-item { display: flex; align-items: center; gap: 5px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>
+            <span style="color:var(--hacker)">CYBER</span><span style="opacity: 0.5;">BATTLE</span>ENV 
+            <span style="font-size:0.6rem; opacity:0.6; padding:3px 8px; border:1px solid #fff; border-radius:15px">LIVE SIMULATION</span>
+        </h1>
+        <div class="badges">
+            <div class="badge">TASK BINDING: <span id="b-task" style="color:#fff">--</span></div>
+            <div class="badge b-hacker">ATTACKER REWARD: <span id="b-reward">0.00</span></div>
+            <div class="badge b-defender">DEFENDER: <span id="b-done">MONITORING</span></div>
+        </div>
+    </header>
+
+    <main>
+        <div class="panel">
+            <div class="panel-header"><div>NETWORK TOPOLOGY</div> <div style="font-size: 0.7rem; color:var(--defender)">TRUE AI VS AI DYNAMIC</div></div>
+            <div class="network-grid">
+                <div class="nodes-container" id="nodes-container">
+                    <!-- Nodes injected here -->
+                </div>
+                <div class="legend">
+                    <div class="len-item"><div class="dot" style="background:#ffa07a"></div> Vulnerability (Risk)</div>
+                    <div class="len-item"><div class="dot sf-patch"></div> Patch Integrity</div>
+                    <div class="len-item"><div class="dot sf-det"></div> SOC Detection Alert</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">SIMULATION EVENT LOGS</div>
+            <div class="logs-container" id="logs">
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const icons = ["💻", "🌐", "⚙️", "🗄️"];
+        
+        async function fetchState() {
+            try {
+                const res = await fetch('/state');
+                if (!res.ok) return;
+                const state = await res.json();
+                render(state);
+            } catch (e) {
+                console.error("Endpoint offline or syncing:", e);
+            }
+        }
+
+        let lastMessage = "";
+
+        function render(state) {
+            document.getElementById('b-task').innerText = (state.task || "EASY").toUpperCase();
+            document.getElementById('b-reward').innerText = state.total_reward.toFixed(2);
+            document.getElementById('b-done').innerText = state.done ? "EPISODE ENDED" : "AI COMBAT ACTIVE";
+
+            const container = document.getElementById('nodes-container');
+            container.innerHTML = "";
+
+            state.nodes.forEach((n, i) => {
+                const el = document.createElement('div');
+                el.className = `node ${n.is_compromised ? 'compromised' : ''} ${n.is_isolated ? 'isolated' : ''}`;
+                if (n.patch_level > 0.5 && !n.is_compromised) el.classList.add('patched');
+
+                el.innerHTML = `
+                    <div class="node-icon">${icons[i] || "🖥️"}</div>
+                    <div class="node-name">${n.name}</div>
+                    <div class="node-stats">
+                        <div class="stat-bar" title="Vulnerability"><div class="stat-fill sf-vuln" style="width: ${n.vulnerability_level * 100}%"></div></div>
+                        <div class="stat-bar" title="Patch Level"><div class="stat-fill sf-patch" style="width: ${n.patch_level * 100}%"></div></div>
+                        <div class="stat-bar" title="Detection"><div class="stat-fill sf-det" style="width: ${n.detection_risk * 100}%"></div></div>
+                    </div>
+                `;
+                container.appendChild(el);
+            });
+
+            // Handle logs reliably capturing changes in last_action_message
+            if (state.last_action_message && state.last_action_message !== lastMessage) {
+                lastMessage = state.last_action_message;
+                const logs = document.getElementById('logs');
+                const div = document.createElement('div');
+                div.className = 'log-entry';
+                let colorStyle = "color: var(--text);";
+                if (lastMessage.includes("[DEF]") || lastMessage.toLowerCase().includes("patch")) colorStyle = "color: var(--defender);";
+                if (lastMessage.toLowerCase().includes("exploit") || lastMessage.toLowerCase().includes("scan")) colorStyle = "color: var(--hacker);";
+                if (lastMessage.toLowerCase().includes("isolated") || lastMessage.includes("restore")) colorStyle = "color: var(--defender); font-weight:bold;";
+
+                const now = new Date().toISOString().substring(11, 19);
+                div.innerHTML = `<span class="log-time">[${now}]</span> <span style="${colorStyle}">${lastMessage}</span>`;
+                logs.appendChild(div);
+                logs.scrollTop = logs.scrollHeight;
+            }
+        }
+
+        setInterval(fetchState, 1500);
+        fetchState();
+    </script>
+</body>
+</html>

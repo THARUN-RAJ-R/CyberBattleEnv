@@ -1,0 +1,17 @@
+[DEBUG] === TRUE AI vs AI: One agent, two minds, one battlefield ===
+[DEBUG] Every turn: LLM reasons as ATTACKER + LLM reasons as DEFENDER
+[DEBUG] Same model, independent system prompts, one game per task
+
+[START] task=easy env=cyber-battle-env model=Qwen/Qwen2.5-72B-Instruct
+Traceback (most recent call last):
+  File "D:\Meta\cyber-battle-env\inference.py", line 479, in <module>
+    asyncio.run(main())
+  File "C:\Users\tharu\AppData\Local\Programs\Python\Python39\lib\asyncio\runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "C:\Users\tharu\AppData\Local\Programs\Python\Python39\lib\asyncio\base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "D:\Meta\cyber-battle-env\inference.py", line 464, in main
+    score, success, steps, task_rewards = await run_task(client, task, base_url)
+  File "D:\Meta\cyber-battle-env\inference.py", line 302, in run_task
+    defender_level = {"easy": "passive", "medium": "moderate", "hard": "aggressive"}.get(task, "moderate"); role_label = role.upper()
+NameError: name 'role' is not defined
