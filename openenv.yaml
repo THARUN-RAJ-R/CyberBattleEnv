@@ -1,0 +1,86 @@
+name: cyber-battle-env
+version: "1.0.0"
+description: >
+  Multi-agent cybersecurity RL environment.
+  Simulates an enterprise network (User → Web Server → App Server → Database)
+  with an AI attacker vs a scripted defender across 3 difficulty levels.
+
+author: raun
+tags:
+  - cybersecurity
+  - multi-agent
+  - rl
+  - openenv
+
+tasks:
+  - name: easy
+    description: >
+      Exploit the Web Server (node 1). Defender is passive.
+      Attacker starts at User Workstation and must compromise the Web Server.
+    max_steps: 15
+    reward_range: [0.0, 1.0]
+
+  - name: medium
+    description: >
+      Reach and exfiltrate data from the Database (node 3) while staying stealthy.
+      Maximum 2 detections allowed before the episode ends as defender win.
+      The defender patches nodes periodically.
+    max_steps: 20
+    reward_range: [0.0, 1.0]
+
+  - name: hard
+    description: >
+      Full attacker vs aggressive defender battle.
+      Defender isolates nodes, restores compromised systems, and increases monitoring.
+      Attacker must exfiltrate before being detected 3 times.
+    max_steps: 25
+    reward_range: [0.0, 1.0]
+
+action_space:
+  type: discrete
+  actions:
+    - scan          # Reconnaissance — stealth factor 0.8
+    - exploit       # Compromise adjacent node — stealth factor 0.4
+    - lateral_move  # Traverse compromised node — stealth factor 0.6
+    - escalate      # Privilege escalation — stealth factor 0.5
+    - exfiltrate    # Data exfiltration from Database — stealth factor 0.15
+  parameters:
+    - target_node: int  # Node ID: 0=User, 1=WebServer, 2=AppServer, 3=Database
+
+observation_space:
+  nodes:
+    - node_id: int
+    - name: str
+    - vulnerability_level: float  # 0.0–1.0
+    - is_compromised: bool
+    - detection_risk: float       # 0.0–1.0
+    - patch_level: float          # 0.0–1.0
+    - is_isolated: bool
+    - is_monitored: bool
+  attacker_position: int
+  attacker_detected: bool
+  detection_count: int
+  compromised_nodes: list[int]
+  available_attacker_actions: list[str]
+
+reward:
+  shaping: true
+  partial_progress: true
+  signals:
+    - scan_success:        +0.05
+    - exploit_success:     +0.20 to +0.35
+    - lateral_move:        +0.05 to +0.15
+    - escalate_success:    +0.07
+    - exfiltration:        +0.70
+    - task_win_bonus:      +0.50 (task 1 only)
+    - detection_penalty:   -0.05 to -0.30
+    - timeout_penalty:     -0.10
+
+endpoint:
+  server: uvicorn cyber_battle_env.server.app:app
+  port: 8000
+  health: /health
+  reset: POST /reset
+  step: POST /step
+  state: GET /state
+  docs: GET /docs

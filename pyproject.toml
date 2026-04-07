@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cyber-battle-env"
+version = "1.0.0"
+description = "Multi-agent cybersecurity RL environment for LLM training (OpenEnv)"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+keywords = ["reinforcement-learning", "cybersecurity", "openenv", "llm", "multi-agent"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.0.0",
+    "httpx>=0.25.0",
+]
+
+[project.optional-dependencies]
+openenv = ["openenv-core>=0.2.2"]
+server  = ["fastmcp>=3.0.0"]
+train   = ["trl>=0.17.0", "transformers>=4.40.0", "datasets>=2.18.0", "accelerate>=0.28.0"]
+dev     = ["pytest>=8.0", "pytest-asyncio>=0.23", "httpx>=0.25.0", "ruff", "mypy"]
+
+[project.scripts]
+cyber-battle-server = "cyber_battle_env.server.app:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cyber_battle_env*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true

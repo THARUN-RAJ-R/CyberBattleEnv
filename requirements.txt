@@ -1,0 +1,17 @@
+# Core server dependencies (always required)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+httpx>=0.25.0
+
+# LLM inference (inference.py)
+openai>=1.30.0
+
+# HF Hub
+huggingface-hub>=0.22.0
+
+# OpenEnv core framework (optional — env works without it, enables /ws WebSocket)
+# openenv-core>=0.2.2
+
+# MCP tool-calling support
+# fastmcp>=3.0.0
