@@ -346,7 +346,7 @@ async def run_task(client, task, base_url):
                     try:
                         r = await http.post(
                             "/step",
-                            json={"action_type": atype, "target_node": target},
+                            json={"action_type": atype, "target_node": target, "last_task": task},
                         )
                         if r.status_code >= 500 and attempt == 0:
                             await http.post("/reset", json={"task": task, "seed": 42})
@@ -402,7 +402,7 @@ async def run_task(client, task, base_url):
                     try:
                         dr = await http.post(
                             "/defender_step",
-                            json={"action_type": def_atype, "target_node": def_target},
+                            json={"action_type": def_atype, "target_node": def_target, "last_task": task},
                         )
                         if dr.status_code == 200:
                             obs_dict = dr.json()
