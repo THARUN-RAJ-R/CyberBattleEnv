@@ -169,3 +169,19 @@ if _openenv_app is not None:
     for route in _raw.routes:
         if hasattr(route, "path") and route.path not in existing_paths:
             _openenv_app.routes.append(route)
+
+
+def main() -> None:
+    """Entry point for `openenv validate` and `[project.scripts]`."""
+    import uvicorn
+    uvicorn.run(
+        "cyber_battle_env.server.app:app",
+        host="0.0.0.0",
+        port=8000,
+        workers=1,
+        log_level="info",
+    )
+
+
+if __name__ == "__main__":
+    main()
