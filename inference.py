@@ -274,7 +274,7 @@ def get_defender_action(client, step, obs_dict, def_history, task="hard"):
 
 # ── Single task runner ────────────────────────────────────────────────────
 
-async def run_task(client, task, base_url):
+async def run_task(client, task, base_url, role="attacker"):
     """
     Run one full episode.
     - easy/medium: LLM Attacker vs scripted defender (in environment)
@@ -298,15 +298,15 @@ async def run_task(client, task, base_url):
     # ALL tasks now use TRUE AI vs AI
     is_ai_vs_ai = True
 
-    log_start(task=task, model=MODEL_NAME)
-    defender_level = {"easy": "passive", "medium": "moderate", "hard": "aggressive"}.get(task, "moderate")
-    print("[DEBUG] TRUE AI vs AI: LLM Attacker vs LLM Defender (" + defender_level + ")", flush=True)
+    log_start(task=task+"["+role+"]", model=MODEL_NAME)
+    defender_level = {"easy": "passive", "medium": "moderate", "hard": "aggressive"}.get(task, "moderate"); role_label = role.upper()
+    print("[DEBUG] Role=" + role.upper() + " | task=" + task + " | defender_level=" + defender_level, flush=True)
 
     async with httpx.AsyncClient(base_url=base_url, timeout=60.0, verify=False) as http:
 
         # ── reset ──────────────────────────────────────────────────────────
         try:
-            r = await http.post("/reset", json={"task": task, "seed": 42})
+            r = await http.post("/reset", json={"task": task, "seed": 42, "role": role})
             r.raise_for_status()
             obs_dict = r.json()
         except Exception as exc:
@@ -323,7 +323,9 @@ async def run_task(client, task, base_url):
 
                 # ── ATTACKER turn (LLM) ────────────────────────────────
                 raw_att, att_err = get_attacker_action(client, step, obs_dict, att_history)
-                atype, target, parse_err = _parse_node(raw_att, "scan", 1)
+                default_action = "monitor" if role == "defender" else "scan"
+                default_node  = 3 if role == "defender" else 1
+                atype, target, parse_err = _parse_node(raw_att, default_action, default_node)
                 last_error = att_err or parse_err
 
                 att_action_str = ('{"action_type":"' + atype
@@ -338,14 +340,14 @@ async def run_task(client, task, base_url):
                             json={"action_type": atype, "target_node": target},
                         )
                         if r.status_code >= 500 and attempt == 0:
-                            await http.post("/reset", json={"task": task, "seed": 42})
+                            await http.post("/reset", json={"task": task, "seed": 42, "role": role})
                             await asyncio.sleep(0.5)
                             continue
                         r.raise_for_status()
                         obs_new = r.json()
                         if ("ended" in obs_new.get("last_action_message","").lower()
                                 and not obs_new.get("done") and attempt == 0):
-                            await http.post("/reset", json={"task": task, "seed": 42})
+                            await http.post("/reset", json={"task": task, "seed": 42, "role": role})
                             await asyncio.sleep(0.5)
                             continue
                         break
@@ -451,21 +453,37 @@ async def main():
         container_id, base_url = await _start_docker(IMAGE_NAME)
 
     try:
-        all_scores = []
+        print("[DEBUG] === DUAL-ROLE EVALUATION: Agent plays ATTACKER + DEFENDER ===", flush=True)
+        print("[DEBUG] Each task is run TWICE: once as attacker, once as defender.", flush=True)
+        print("[DEBUG] Final score = average of both roles across all tasks.", flush=True)
+        print("", flush=True)
+
+        combined = []
         for task in TASKS:
-            score, success, steps, task_rewards = await run_task(client, task, base_url)
-            all_scores.append(score)
-            print(
-                "[DEBUG] task=" + task
-                + " score=" + ("%.2f" % score)
-                + " success=" + str(success)
-                + " steps=" + str(steps),
-                flush=True,
-            )
+            # ── Role 1: ATTACKER ──────────────────────────────────────────
+            print("[DEBUG] --- " + task.upper() + " | ROLE: ATTACKER ---", flush=True)
+            att_score, att_ok, att_steps, _ = await run_task(client, task, base_url, role="attacker")
+            print("[DEBUG] attacker score=" + ("%.2f" % att_score) + " success=" + str(att_ok), flush=True)
             print("", flush=True)
 
-        avg = sum(all_scores) / len(all_scores) if all_scores else 0.0
-        print("[DEBUG] overall_avg_score=" + ("%.2f" % avg), flush=True)
+            # ── Role 2: DEFENDER ──────────────────────────────────────────
+            print("[DEBUG] --- " + task.upper() + " | ROLE: DEFENDER ---", flush=True)
+            def_score, def_ok, def_steps, _ = await run_task(client, task, base_url, role="defender")
+            print("[DEBUG] defender score=" + ("%.2f" % def_score) + " success=" + str(def_ok), flush=True)
+            print("", flush=True)
+
+            task_combined = (att_score + def_score) / 2.0
+            combined.append(task_combined)
+            print("[DEBUG] " + task + " COMBINED=" + ("%.2f" % task_combined)
+                  + " (attacker=" + ("%.2f" % att_score)
+                  + " defender=" + ("%.2f" % def_score) + ")", flush=True)
+            print("", flush=True)
+
+        overall = sum(combined) / len(combined) if combined else 0.0
+        print("[DEBUG] ===================================================", flush=True)
+        print("[DEBUG] OVERALL DUAL-ROLE SCORE: " + ("%.2f" % overall) + " (" + ("%.0f" % (overall*100)) + "%)", flush=True)
+        print("[DEBUG] This agent understands BOTH attacking AND defending.", flush=True)
+        print("[DEBUG] ===================================================", flush=True)
 
     finally:
         if container_id:

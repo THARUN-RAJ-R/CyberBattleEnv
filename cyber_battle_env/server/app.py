@@ -100,7 +100,7 @@ def _make_app() -> FastAPI:
     @application.post("/reset", response_model=CyberBattleObservation, tags=["env"])
     async def reset(req: ResetRequest = ResetRequest()):
         try:
-            obs = _env.reset(task=req.task, seed=req.seed, episode_id=req.episode_id)
+            obs = _env.reset(task=req.task, seed=req.seed, episode_id=req.episode_id, role=req.role)
             return obs
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc))

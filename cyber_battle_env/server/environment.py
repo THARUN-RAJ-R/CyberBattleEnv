@@ -109,6 +109,7 @@ class CyberBattleEnvironment:
         self._nodes: Dict[int, _Node] = {}
         self._attacker_pos = 0
         self._task = "easy"
+        self._role = "attacker"   # "attacker" | "defender"
         self._turn = 0
         self._detection_count = 0
         self._alerts: List[DefenderAlert] = []
@@ -117,20 +118,30 @@ class CyberBattleEnvironment:
         self._done = False
         self._winner: Optional[str] = None
         self._compromised: List[int] = [0]
+        self._scripted_att_idx = 0   # index into scripted attacker playbook
 
     def reset(
         self,
         task: str = "easy",
         seed: Optional[int] = None,
         episode_id: Optional[str] = None,
+        role: str = "attacker",
         **kwargs,
     ) -> CyberBattleObservation:
-        """Start a new episode.  task ∈ {"easy", "medium", "hard"}."""
+        """Start a new episode.
+        task ∈ {"easy", "medium", "hard"}
+        role ∈ {"attacker", "defender"}
+          attacker — agent controls attacker, scripted defender reacts after each step.
+          defender — agent controls defender, scripted attacker acts before each step.
+        """
         if task not in MAX_TURNS:
             raise ValueError(f"Unknown task '{task}'. Choose: easy | medium | hard")
+        if role not in ("attacker", "defender"):
+            raise ValueError(f"Unknown role '{role}'. Choose: attacker | defender")
 
         self._rng = random.Random(seed)
         self._task = task
+        self._role = role
         self._turn = 0
         self._detection_count = 0
         self._alerts = []
@@ -140,29 +151,35 @@ class CyberBattleEnvironment:
         self._attacker_pos = 0
         self._compromised = [0]
         self._episode_id = episode_id or str(uuid.uuid4())
+        self._scripted_att_idx = 0
 
         self._nodes = {
             nid: _Node(nid, v, p, d)
             for nid, (v, p, d) in NODE_DEFAULTS.items()
         }
 
-        logger.info("[RESET] episode=%s task=%s", self._episode_id, task)
-        return self._build_obs(
-            done=False,
-            reward=0.0,
-            success=True,
-            msg=f"Episode started. Task: {task}. Attacker at node 0 (User Workstation).",
+        logger.info("[RESET] episode=%s task=%s role=%s", self._episode_id, task, role)
+        role_msg = (
+            "DEFENDER mode: protect the network from the scripted attacker."
+            if role == "defender" else
+            f"ATTACKER mode: Task={task}. Start at node 0 (User Workstation)."
         )
+        return self._build_obs(done=False, reward=0.0, success=True, msg=role_msg)
 
     # ── step ──────────────────────────────────────────────────────────────────
 
     def step(self, action: CyberBattleAction, **kwargs) -> CyberBattleObservation:
-        """Process one attacker action + optional scripted defender reaction."""
+        """Process one step. Behaviour depends on role:
+          attacker role -> action is an attacker action; scripted defender reacts after.
+          defender role -> action is a defender action; scripted attacker acts first.
+        """
         if self._done:
             return self._build_obs(
                 done=True, reward=0.0, success=False,
                 msg="Episode ended. Call reset() to start a new episode.",
             )
+        if self._role == "defender":
+            return self._step_as_defender(action)
 
         self._turn += 1
         self._alerts = []
@@ -429,6 +446,59 @@ class CyberBattleEnvironment:
 
 
 
+
+    # __ Defender role: step_as_defender __
+    _ATT_PLAYBOOKS = {
+        "easy":   [("scan", 1), ("exploit", 1)],
+        "medium": [("scan", 1), ("exploit", 1), ("lateral_move", 1),
+                   ("scan", 2), ("exploit", 2), ("lateral_move", 2),
+                   ("scan", 3), ("exploit", 3), ("lateral_move", 3), ("exfiltrate", 3)],
+        "hard":   [("scan", 1), ("escalate", 0), ("exploit", 1), ("lateral_move", 1),
+                   ("scan", 2), ("escalate", 1), ("exploit", 2), ("lateral_move", 2),
+                   ("scan", 3), ("exploit", 3), ("lateral_move", 3),
+                   ("escalate", 3), ("exfiltrate", 3)],
+    }
+
+    def _scripted_attacker_step(self):
+        """Execute next scripted attacker move. Returns (action_type, result_msg)."""
+        playbook = self._ATT_PLAYBOOKS.get(self._task, self._ATT_PLAYBOOKS["easy"])
+        if self._scripted_att_idx >= len(playbook):
+            return "scan", "Scripted attacker: all moves exhausted."
+        atype, target = playbook[self._scripted_att_idx]
+        self._scripted_att_idx += 1
+        action = CyberBattleAction(action_type=atype, target_node=target)
+        obs, _ = self._dispatch_attacker(action)
+        return atype, obs.last_action_message
+
+    def _step_as_defender(self, action):
+        """Defender-role step: scripted attacker moves first, then agent defends."""
+        self._turn += 1
+        self._alerts = []
+        comp_before = len(self._compromised)
+        det_before  = self._detection_count
+        att_atype, att_msg = self._scripted_attacker_step()
+        if self._done:
+            step_reward = -0.4
+            self._total_reward += step_reward
+            return self._build_obs(done=True, reward=step_reward, success=False,
+                msg="Attacker exfiltrated! [ATTACKER WINS]")
+        comp_after = len(self._compromised)
+        det_after  = self._detection_count
+        def_obs = self.apply_defender_action(action.action_type, action.target_node)
+        step_reward  = 0.0
+        step_reward += (det_after - det_before) * 0.15
+        step_reward -= (comp_after - comp_before) * 0.20
+        step_reward += 0.05
+        if self._done and self._winner == "defender":
+            step_reward += 0.5
+        if not self._done and self._turn >= MAX_TURNS[self._task]:
+            self._done   = True
+            self._winner = "defender"
+            step_reward  += 0.2
+        step_reward = round(max(-0.5, min(0.7, step_reward)), 4)
+        self._total_reward += step_reward
+        msg = "[ATT] " + att_msg[:38] + " | [DEF] " + def_obs.last_action_message[:38]
+        return self._build_obs(done=self._done, reward=step_reward, success=True, msg=msg)
     def _defender_moderate(self) -> Tuple[Optional[str], Optional[int]]:
         """Patch the most vulnerable uncompromised node every 3 turns."""
         if self._turn % 3 != 0:
