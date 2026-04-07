@@ -121,13 +121,19 @@ score = min(sum(rewards) / max_possible_reward, 1.0)
 
 ---
 
-## Defender (Scripted)
+## 🧠 Innovation: True AI vs AI Symmetrical Learning
 
-| Task | Defender Behaviour |
-|------|--------------------|
-| `easy` | Passive — no actions |
-| `medium` | Patch highest-vuln node every 3 turns |
-| `hard` | Aggressive: isolate DB if attacker is close; restore compromised nodes; monitor attacker position; patch continuously |
+Unlike standard static evaluation environments, CyberBattleEnv forces the LLM to evaluate itself by playing chess against its own mirrored intelligence. 
+
+In a single episode `step()`, the environment requests the agent to act as the Hacker to attack the network. Then, millisecond later, the exact same model is invoked with a decoupled system prompt and state context to act as the Security Engineer and defend the network based on the resulting logs. It is a 1v1 psychological duel that dynamically evaluates how well an LLM can both breach and secure the same systems. 
+
+The psychological traits scale directly with task difficulty:
+
+| Task | Attacker Persona | Defender Persona |
+|------|------------------|------------------|
+| `easy` | Junior Script-Kiddie | Junior Analyst (Passive) |
+| `medium` | Persistent Threat Hacker | Security Engineer (Moderate) |
+| `hard` | Elite Nation-State AI | Aggressive Incident Response AI |
 
 ---
 
