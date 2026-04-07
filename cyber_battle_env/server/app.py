@@ -123,6 +123,24 @@ def _make_app() -> FastAPI:
     async def state():
         return _env.state
 
+    # ── Defender Step (AI vs AI — hard task) ─────────────────────────────────
+    # Allows the LLM defender to take an action in the environment.
+    # In the hard task, inference.py calls this after each attacker step,
+    # making it TRUE AI vs AI: both sides controlled by the LLM.
+
+    @application.post("/defender_step", response_model=CyberBattleObservation, tags=["env"])
+    async def defender_step(req: StepRequest):
+        from ..models import DefenderActionType
+        valid = [a.value for a in DefenderActionType]
+        if req.action_type not in valid:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid defender action '{req.action_type}'. Valid: {valid}",
+            )
+        obs = _env.apply_defender_action(req.action_type, req.target_node)
+        return obs
+
+
     # ── Web UI stub ──────────────────────────────────────────────────────────
 
     @application.get("/web", tags=["meta"])

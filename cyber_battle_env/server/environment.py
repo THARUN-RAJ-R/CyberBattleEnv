@@ -380,6 +380,55 @@ class CyberBattleEnvironment:
             return self._defender_moderate()
         return self._defender_aggressive()
 
+    def apply_defender_action(self, action_type: str, target_node: int) -> "CyberBattleObservation":
+        """
+        Apply a DEFENDER action chosen by the LLM (TRUE AI vs AI mode).
+        Called by POST /defender_step. Available: patch, monitor, isolate, restore, block.
+        """
+        node = self._nodes.get(target_node)
+        msg  = "Defender: "
+
+        if action_type == "patch":
+            if node:
+                node.patch_level         = min(1.0, node.patch_level + 0.25)
+                node.vulnerability_level = max(0.0, node.vulnerability_level - 0.20)
+                msg += "Patched " + node.name
+            else:
+                msg += "patch failed — bad node"
+        elif action_type == "monitor":
+            if node:
+                node.is_monitored   = True
+                node.detection_risk = min(1.0, node.detection_risk + 0.25)
+                msg += "Monitoring " + node.name
+            else:
+                msg += "monitor failed — bad node"
+        elif action_type == "isolate":
+            if node and target_node != 0:
+                node.is_isolated = True
+                msg += "Isolated " + node.name
+            else:
+                msg += "isolate failed — invalid target"
+        elif action_type == "restore":
+            if node and target_node in self._compromised and target_node != 0:
+                node.is_compromised = False
+                self._compromised.remove(target_node)
+                msg += "Restored " + node.name
+            else:
+                msg += "restore failed — not compromised or invalid"
+        elif action_type == "block":
+            if node:
+                node.detection_risk = 1.0
+                node.is_monitored   = True
+                msg += "Blocked " + node.name + " (det=1.0)"
+            else:
+                msg += "block failed — bad node"
+        else:
+            msg += "unknown action '" + action_type + "'"
+
+        return self._build_obs(done=self._done, reward=0.0, success=True, msg=msg)
+
+
+
     def _defender_moderate(self) -> Tuple[Optional[str], Optional[int]]:
         """Patch the most vulnerable uncompromised node every 3 turns."""
         if self._turn % 3 != 0:
