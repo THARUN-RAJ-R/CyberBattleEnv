@@ -51,10 +51,12 @@ SUCCESS_THRESHOLD = {"easy": 0.5, "medium": 0.4, "hard": 0.3}
 TEMPERATURE = 0.4
 MAX_TOKENS  = 200
 
-# ── ATTACKER system prompt ────────────────────────────────────────────────
-ATTACKER_PROMPT = textwrap.dedent("""
-You are an AI red-team ATTACKER in a cybersecurity simulation.
+# ── ATTACKER system prompts (scales with task difficulty) ─────────────────
+# easy:   Junior Attacker -> 1v1 vs Junior Analyst
+# medium: Advanced Attacker -> 1v1 vs Security Engineer
+# hard:   Elite Nation-State Attacker -> 1v1 vs Aggressive AI Defender
 
+_BASE_ATTACKER = """
 NETWORK:
   Node 0: User Workstation (start — already compromised)
   Node 1: Web Server        (adjacent to 0 and 2)
@@ -69,17 +71,26 @@ YOUR ACTIONS (output ONE JSON):
   {"action_type": "exfiltrate",   "target_node": 3}
 
 GOAL: Compromise all nodes and exfiltrate the database.
-AVOID: Being detected (costs reward, ends episode on hard task).
-
-STRATEGY:
-  easy   -> scan(1), exploit(1)
-  medium -> move stealthily from node 0 to node 3, then exfiltrate
-  hard   -> move fast! An AI defender is actively working against you.
-            Use scan to identify low-risk paths, escalate to reduce
-            detection, and exfiltrate before the defender patches everything.
-
+AVOID: Being detected.
 Reply with exactly one JSON line. Nothing else.
-""").strip()
+"""
+
+ATTACKER_PROMPTS = {
+    "easy": textwrap.dedent("""
+    You are a JUNIOR script-kiddie hacker. You are attacking a junior analyst.
+    Keep it simple. Scan and exploit the first server you find.
+    """ + _BASE_ATTACKER).strip(),
+    
+    "medium": textwrap.dedent("""
+    You are a PERSISTENT THREAT hacker. You are battling a skilled Security Engineer.
+    Move stealthily, hop between machines, and target the database.
+    """ + _BASE_ATTACKER).strip(),
+    
+    "hard": textwrap.dedent("""
+    You are an ELITE AI NATION-STATE ATTACKER. You are battling an aggressive elite Defender AI.
+    Move fast, escalate privileges, and deceive the defender. Time is against you.
+    """ + _BASE_ATTACKER).strip()
+}
 
 # ── DEFENDER system prompts (scales with task difficulty) ─────────────────
 # easy:   Passive LLM — only patches, never isolates. Training wheels.
@@ -205,7 +216,7 @@ def _build_network_block(obs_dict: dict) -> str:
     return "\n".join(lines)
 
 
-def get_attacker_action(client, step, obs_dict, history):
+def get_attacker_action(client, step, obs_dict, history, task="hard"):
     """Ask LLM for attacker move. Returns (action_str, error)."""
     net   = _build_network_block(obs_dict)
     avail = ", ".join(obs_dict.get("available_attacker_actions", []))
@@ -227,7 +238,7 @@ def get_attacker_action(client, step, obs_dict, history):
         resp = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": ATTACKER_PROMPT},
+                {"role": "system", "content": ATTACKER_PROMPTS.get(task, ATTACKER_PROMPTS["hard"])},
                 {"role": "user",   "content": prompt},
             ],
             temperature=TEMPERATURE, max_tokens=MAX_TOKENS, stream=False,
@@ -322,7 +333,7 @@ async def run_task(client, task, base_url):
                     break
 
                 # ── ATTACKER turn (LLM) ────────────────────────────────
-                raw_att, att_err = get_attacker_action(client, step, obs_dict, att_history)
+                raw_att, att_err = get_attacker_action(client, step, obs_dict, att_history, task)
                 atype, target, parse_err = _parse_node(raw_att, "scan", 1)
                 last_error = att_err or parse_err
 
