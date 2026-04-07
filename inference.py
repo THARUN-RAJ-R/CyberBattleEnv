@@ -337,7 +337,7 @@ async def run_task(client, task, base_url, role="attacker"):
                     try:
                         r = await http.post(
                             "/step",
-                            json={"action_type": atype, "target_node": target},
+                            json={"action_type": atype, "target_node": target, "role": role, "last_task": task},
                         )
                         if r.status_code >= 500 and attempt == 0:
                             await http.post("/reset", json={"task": task, "seed": 42, "role": role})

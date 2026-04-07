@@ -54,6 +54,8 @@ class StepRequest(BaseModel):
     action_type: str
     target_node: int = 1
     parameters: Dict[str, Any] = {}
+    role: Optional[str] = None       # attacker|defender recovery hint
+    last_task: Optional[str] = None  # task recovery hint
 
 
 # ── Singleton environment (one per container process) ─────────────────────────
@@ -110,6 +112,15 @@ def _make_app() -> FastAPI:
 
     @application.post("/step", response_model=CyberBattleObservation, tags=["env"])
     async def step(req: StepRequest):
+        # Auto-recover from multi-worker state loss on HF Spaces.
+        # If env was reset by a different worker, the role may have defaulted back
+        # to "attacker". The client sends role+task so we can re-apply it.
+        if req.role and _env._role != req.role:
+            _env._role = req.role
+        if req.last_task and _env._task != req.last_task:
+            # Full re-reset needed (different worker got the original reset)
+            _env.reset(task=req.last_task, role=req.role or "attacker", seed=42)
+
         action = CyberBattleAction(
             action_type=req.action_type,
             target_node=req.target_node,
@@ -117,6 +128,7 @@ def _make_app() -> FastAPI:
         )
         obs = _env.step(action)
         return obs
+
 
     # ── State ────────────────────────────────────────────────────────────────
 
