@@ -1,3 +1,19 @@
+---
+title: Cyber Battle Env
+emoji: 🛡️
+colorFrom: red
+colorTo: blue
+sdk: docker
+app_port: 8000
+pinned: false
+license: apache-2.0
+short_description: Multi-agent cybersecurity RL environment for LLM training
+tags:
+  - openenv
+  - reinforcement-learning
+  - cybersecurity
+---
+
 # CyberBattleEnv
 
 > Multi-agent cybersecurity RL environment for LLM training and evaluation.
