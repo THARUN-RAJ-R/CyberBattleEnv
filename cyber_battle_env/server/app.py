@@ -47,6 +47,7 @@ class ResetRequest(BaseModel):
     task: str = "easy"
     seed: Optional[int] = None
     episode_id: Optional[str] = None
+    role: str = "attacker"   # "attacker" | "defender"
 
 
 class StepRequest(BaseModel):
