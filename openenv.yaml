@@ -1,9 +1,9 @@
 name: cyber-battle-env
 version: "1.0.0"
 description: >
-  Multi-agent cybersecurity RL environment.
-  Simulates an enterprise network (User → Web Server → App Server → Database)
-  with an AI attacker vs a scripted defender across 3 difficulty levels.
+  TRUE multi-agent AI vs AI cybersecurity simulation.
+  LLM Attacker vs LLM Defender across 3 difficulty levels.
+  Network: User -> Web Server -> App Server -> Database.
 
 author: raun
 tags:
@@ -15,24 +15,29 @@ tags:
 tasks:
   - name: easy
     description: >
-      Exploit the Web Server (node 1). Defender is passive.
-      Attacker starts at User Workstation and must compromise the Web Server.
+      TRUE AI vs AI (Easy): LLM Attacker vs Passive LLM Defender.
+      Attacker goal: compromise the Web Server (node 1).
+      Defender role: junior analyst — patch and monitor only, no isolation.
+      Attacker wins with a basic 2-step strategy (scan + exploit).
     max_steps: 15
     reward_range: [0.0, 1.0]
 
   - name: medium
     description: >
-      Reach and exfiltrate data from the Database (node 3) while staying stealthy.
-      Maximum 2 detections allowed before the episode ends as defender win.
-      The defender patches nodes periodically.
+      TRUE AI vs AI (Medium): LLM Attacker vs Moderate LLM Defender.
+      Attacker goal: exfiltrate data from the Database (node 3) stealthily.
+      Defender role: security engineer — patches nodes and monitors actively.
+      Max 2 detections allowed. Attacker must plan a multi-hop stealthy route.
     max_steps: 20
     reward_range: [0.0, 1.0]
 
   - name: hard
     description: >
-      Full attacker vs aggressive defender battle.
-      Defender isolates nodes, restores compromised systems, and increases monitoring.
-      Attacker must exfiltrate before being detected 3 times.
+      TRUE AI vs AI (Hard): LLM Attacker vs Aggressive LLM Defender.
+      Both sides use an LLM to reason and adapt each turn.
+      Defender has full arsenal: patch, monitor, isolate, restore, block.
+      Attacker must exfiltrate the Database before being detected 3 times.
+      The most challenging task — both agents genuinely learn from each other.
     max_steps: 25
     reward_range: [0.0, 1.0]
 
@@ -81,6 +86,7 @@ endpoint:
   port: 8000
   health: /health
   reset: POST /reset
-  step: POST /step
+  step: POST /step              # Attacker action
+  defender_step: POST /defender_step  # Defender action (AI vs AI)
   state: GET /state
   docs: GET /docs

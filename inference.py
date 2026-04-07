@@ -14,10 +14,10 @@ STDOUT FORMAT (exact):
   [STEP]  step=<n> action=<action_str> reward=<0.00> done=<true|false> error=<msg|null>
   [END]   success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...,rn>
 
-Tasks:
-  easy        - Attacker only vs passive environment
-  medium      - Attacker only vs scripted moderate defender
-  hard        - Attacker + LLM Defender (TRUE AI vs AI)
+Tasks (ALL are TRUE AI vs AI — LLM Attacker vs LLM Defender):
+  easy        - LLM Attacker vs Passive LLM Defender   (junior analyst, patch only)
+  medium      - LLM Attacker vs Moderate LLM Defender  (engineer, patch+monitor+restore)
+  hard        - LLM Attacker vs Aggressive LLM Defender (full arsenal, rapid response)
 """
 
 from __future__ import annotations
@@ -81,36 +81,72 @@ STRATEGY:
 Reply with exactly one JSON line. Nothing else.
 """).strip()
 
-# ── DEFENDER system prompt (for hard task — TRUE AI vs AI) ────────────────
-DEFENDER_PROMPT = textwrap.dedent("""
-You are an AI DEFENDER protecting a corporate network from an active attacker.
+# ── DEFENDER system prompts (scales with task difficulty) ─────────────────
+# easy:   Passive LLM — only patches, never isolates. Training wheels.
+# medium: Moderate LLM — patches + monitors, rare isolation.
+# hard:   Aggressive LLM — full arsenal, rapid response.
 
-NETWORK:
-  Node 0: User Workstation (COMPROMISED — attacker's base)
-  Node 1: Web Server        (adjacent to 0 and 2)
-  Node 2: App Server        (adjacent to 1 and 3)
-  Node 3: Database          (HIGH VALUE — must protect at all costs)
+DEFENDER_PROMPTS = {
+    "easy": textwrap.dedent("""
+    You are a JUNIOR security analyst protecting a corporate network.
+    You are not very experienced, so you only do basic patching.
 
-YOUR ACTIONS (output ONE JSON):
-  {"action_type": "patch",    "target_node": <1-3>}   -> Reduce vulnerability
-  {"action_type": "monitor",  "target_node": <1-3>}   -> Increase detection risk
-  {"action_type": "isolate",  "target_node": <1-3>}   -> Block node from attacker
-  {"action_type": "restore",  "target_node": <1-3>}   -> Un-compromise a node
-  {"action_type": "block",    "target_node": <0-3>}   -> Block attacker at position
+    YOUR ACTIONS (output ONE JSON):
+      {"action_type": "patch",   "target_node": <1-3>}
+      {"action_type": "monitor", "target_node": <1-3>}
 
-GOAL: Stop the attacker before they reach and exfiltrate the Database (node 3).
-WIN: Detect the attacker 3 times OR block them from reaching the database.
+    RULES:
+      - Only patch or monitor. Do NOT isolate or block.
+      - Patch the most vulnerable node you know about.
+      - You may miss some attacker activity.
 
-STRATEGY:
-  - ALWAYS protect node 3 (Database) first — monitor or isolate it
-  - Patch the node the attacker is moving toward
-  - If attacker is near node 2 or 3, ISOLATE node 3 immediately
-  - Monitor compromised nodes to raise detection risk
-  - Restore nodes the attacker has compromised to slow them down
+    Reply with exactly one JSON line. Nothing else.
+    """).strip(),
 
-You can see the FULL network state including attacker position.
-Reply with exactly one JSON line. Nothing else.
-""").strip()
+    "medium": textwrap.dedent("""
+    You are a SECURITY ENGINEER protecting a corporate network.
+    An attacker is active — respond with moderate countermeasures.
+
+    YOUR ACTIONS (output ONE JSON):
+      {"action_type": "patch",    "target_node": <1-3>}
+      {"action_type": "monitor",  "target_node": <1-3>}
+      {"action_type": "restore",  "target_node": <1-3>}
+
+    STRATEGY:
+      - Patch whichever node the attacker just touched.
+      - Monitor the Database (node 3) regularly.
+      - Restore compromised nodes when possible.
+      - Do NOT isolate yet — try softer measures first.
+
+    Reply with exactly one JSON line. Nothing else.
+    """).strip(),
+
+    "hard": textwrap.dedent("""
+    You are an AI DEFENDER protecting a corporate network from an active attacker.
+
+    NETWORK:
+      Node 0: User Workstation (COMPROMISED — attacker base)
+      Node 1: Web Server        (adjacent to 0 and 2)
+      Node 2: App Server        (adjacent to 1 and 3)
+      Node 3: Database          (HIGH VALUE — protect at ALL costs)
+
+    YOUR ACTIONS (output ONE JSON):
+      {"action_type": "patch",    "target_node": <1-3>}  -> Harden node
+      {"action_type": "monitor",  "target_node": <1-3>}  -> Raise detection
+      {"action_type": "isolate",  "target_node": <1-3>}  -> Lock node
+      {"action_type": "restore",  "target_node": <1-3>}  -> Un-compromise
+      {"action_type": "block",    "target_node": <0-3>}  -> Max detection
+
+    STRATEGY:
+      - Turn 1: ALWAYS monitor(3) — protect the Database immediately.
+      - Patch the exact node the attacker is heading toward.
+      - If attacker reaches node 2, ISOLATE node 3 instantly.
+      - Restore compromised nodes to cut off attacker movement.
+      - Use block on nodes the attacker keeps returning to.
+
+    Reply with exactly one JSON line. Nothing else.
+    """).strip(),
+}
 
 
 # ── Logging (exact spec format) ────────────────────────────────────────────
@@ -202,9 +238,9 @@ def get_attacker_action(client, step, obs_dict, history):
         return '{"action_type":"scan","target_node":1}', str(e)
 
 
-def get_defender_action(client, step, obs_dict, def_history):
-    """Ask LLM for defender move. Returns (action_str, error).
-    Only used in the 'hard' task (TRUE AI vs AI mode).
+def get_defender_action(client, step, obs_dict, def_history, task="hard"):
+    """Ask LLM for defender move. Difficulty scales with task.
+    easy=passive, medium=moderate, hard=aggressive.
     """
     net       = _build_network_block(obs_dict)
     att_pos   = obs_dict.get("attacker_position", 0)
@@ -220,11 +256,12 @@ def get_defender_action(client, step, obs_dict, def_history):
         + "Your defense history:\n" + hist + "\n\n"
         + "Your next defensive action (JSON):"
     )
+    defender_prompt = DEFENDER_PROMPTS.get(task, DEFENDER_PROMPTS["hard"])
     try:
         resp = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": DEFENDER_PROMPT},
+                {"role": "system", "content": defender_prompt},
                 {"role": "user",   "content": prompt},
             ],
             temperature=TEMPERATURE, max_tokens=MAX_TOKENS, stream=False,
@@ -258,11 +295,12 @@ async def run_task(client, task, base_url):
     success     = False
     last_error  = None
 
-    is_ai_vs_ai = (task == "hard")
+    # ALL tasks now use TRUE AI vs AI
+    is_ai_vs_ai = True
 
     log_start(task=task, model=MODEL_NAME)
-    if is_ai_vs_ai:
-        print("[DEBUG] HARD task: TRUE AI vs AI mode — LLM Attacker vs LLM Defender", flush=True)
+    defender_level = {"easy": "passive", "medium": "moderate", "hard": "aggressive"}.get(task, "moderate")
+    print("[DEBUG] TRUE AI vs AI: LLM Attacker vs LLM Defender (" + defender_level + ")", flush=True)
 
     async with httpx.AsyncClient(base_url=base_url, timeout=60.0, verify=False) as http:
 
@@ -344,7 +382,7 @@ async def run_task(client, task, base_url):
 
                 # ── DEFENDER turn (LLM — only on hard task) ───────────
                 if is_ai_vs_ai and not done:
-                    raw_def, def_err = get_defender_action(client, step, obs_dict, def_history)
+                    raw_def, def_err = get_defender_action(client, step, obs_dict, def_history, task)
                     def_atype, def_target, _ = _parse_node(raw_def, "monitor", 3)
 
                     def_action_str = ('{"action_type":"' + def_atype
