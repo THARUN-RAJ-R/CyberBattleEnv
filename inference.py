@@ -35,9 +35,9 @@ from openai import OpenAI
 
 # ── Mandatory env vars (per spec) ────────────────────────────────────────────
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME   = os.getenv("MODEL_NAME",   "Qwen/Qwen2.5-72B-Instruct")
-API_KEY      = os.getenv("HF_TOKEN") or os.getenv("API_KEY") or "hf_placeholder"
-IMAGE_NAME   = os.getenv("IMAGE_NAME")
+MODEL_NAME   = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+HF_TOKEN     = os.getenv("HF_TOKEN")
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:8000")
 
 BENCHMARK = "cyber-battle-env"
@@ -460,11 +460,11 @@ async def main():
     Both happen in the SAME game, every turn.
     TRUE simultaneous AI vs AI.
     """
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
     container_id = None
     base_url = ENV_BASE_URL
-    if IMAGE_NAME:
-        container_id, base_url = await _start_docker(IMAGE_NAME)
+    if LOCAL_IMAGE_NAME:
+        container_id, base_url = await _start_docker(LOCAL_IMAGE_NAME)
     try:
         print("[DEBUG] === TRUE AI vs AI: One agent, two minds, one battlefield ===", flush=True)
         print("[DEBUG] Every turn: LLM reasons as ATTACKER + LLM reasons as DEFENDER", flush=True)
