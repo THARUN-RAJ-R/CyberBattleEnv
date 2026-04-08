@@ -312,6 +312,9 @@ class CyberBattleEnvironment:
         if detected:
             reward -= 0.22
             msg += " [DETECTED]"
+        elif success:
+            reward += 0.05
+            msg += " [STEALTH BONUS]"
 
         # Task 1 win: web server compromised
         if self._task == "easy" and 1 in self._compromised:
@@ -347,6 +350,9 @@ class CyberBattleEnvironment:
         msg = f"Moved {NODE_NAMES[prev]} → {node.name}"
         if detected:
             msg += " [DETECTED]"
+        else:
+            reward += 0.05
+            msg += " [GHOST PROTOCOL BONUS]"
         return self._build_obs(done=self._done, reward=reward, success=True, msg=msg), reward
 
     def _do_escalate(self, target: int) -> Tuple[CyberBattleObservation, float]:
@@ -412,10 +418,14 @@ class CyberBattleEnvironment:
 
         if action_type == "patch":
             if node:
-                node.patch_level         = min(1.0, node.patch_level + 0.25)
-                node.vulnerability_level = max(0.0, node.vulnerability_level - 0.20)
-                msg += "Patched " + node.name
-                gained = 0.12
+                if node.patch_level >= 1.0:
+                    msg += f"Wasteful Time! {node.name} is entirely updated."
+                    gained = -0.06
+                else:
+                    node.patch_level         = min(1.0, node.patch_level + 0.25)
+                    node.vulnerability_level = max(0.0, node.vulnerability_level - 0.20)
+                    msg += "Patched " + node.name
+                    gained = 0.12
             else:
                 msg += "patch failed — bad node"
                 gained = -0.08
@@ -431,26 +441,39 @@ class CyberBattleEnvironment:
         elif action_type == "isolate":
             if node and target_node != 0:
                 node.is_isolated = True
-                msg += "Isolated " + node.name
-                gained = 0.18
+                if not getattr(node, "is_compromised", False):
+                    msg += f"Severe Business Disruption! Isolated clean {node.name}"
+                    gained = -0.15
+                else:
+                    msg += "Isolated " + node.name
+                    gained = 0.18
             else:
                 msg += "isolate failed — invalid target"
                 gained = -0.08
         elif action_type == "restore":
-            if node and target_node in self._compromised and target_node != 0:
-                node.is_compromised = False
-                self._compromised.remove(target_node)
-                msg += "Restored " + node.name
-                gained = 0.34
+            if node and target_node != 0:
+                if getattr(node, "is_compromised", False) == False:
+                    msg += f"Wasteful response. {node.name} is already clean."
+                    gained = -0.08
+                else:
+                    node.is_compromised = False
+                    if target_node in self._compromised:
+                        self._compromised.remove(target_node)
+                    msg += "Restored " + node.name
+                    gained = 0.34
             else:
-                msg += "restore failed — not compromised or invalid"
+                msg += "restore failed — invalid"
                 gained = -0.08
         elif action_type == "block":
             if node:
                 node.detection_risk = 1.0
                 node.is_monitored   = True
-                msg += "Blocked " + node.name + " (det=1.0)"
-                gained = 0.11
+                if target_node == 3:
+                    msg += "Critical Database Guard! Block active on Vault! "
+                    gained = 0.25
+                else:
+                    msg += "Blocked " + node.name + " (det=1.0)"
+                    gained = 0.11
             else:
                 msg += "block failed — bad node"
                 gained = -0.08
