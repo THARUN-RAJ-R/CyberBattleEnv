@@ -43,10 +43,23 @@ ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:8000")
 BENCHMARK = "cyber-battle-env"
 
 # ── Task config ────────────────────────────────────────────────────────────
-TASKS             = ["easy", "medium", "hard"]
-MAX_STEPS         = {"easy": 12, "medium": 16, "hard": 20}
-MAX_TOTAL_REWARD  = {"easy": 0.9, "medium": 1.0, "hard": 1.0}
-SUCCESS_THRESHOLD = {"easy": 0.5, "medium": 0.4, "hard": 0.3}
+TASKS = [f"level_{i}" for i in range(1, 11)]
+
+def get_base_difficulty(task: str) -> str:
+    try:
+        level = int(task.split("_")[1])
+    except:
+        level = 1
+    if level <= 3: return "easy"
+    if level <= 6: return "medium"
+    return "hard"
+
+def get_max_steps(task: str) -> int:
+    try: return 10 + (int(task.split("_")[1]) * 2)
+    except: return 20
+
+def get_max_reward(task: str) -> float: return 1.0
+def get_success_thresh(task: str) -> float: return 0.3
 
 TEMPERATURE = 0.4
 MAX_TOKENS  = 200
@@ -238,7 +251,7 @@ def get_attacker_action(client, step, obs_dict, history, task="hard"):
         resp = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": ATTACKER_PROMPTS.get(task, ATTACKER_PROMPTS["hard"])},
+                {"role": "system", "content": ATTACKER_PROMPTS.get(get_base_difficulty(task), ATTACKER_PROMPTS["hard"])},
                 {"role": "user",   "content": prompt},
             ],
             temperature=TEMPERATURE, max_tokens=MAX_TOKENS, stream=False,
@@ -267,7 +280,7 @@ def get_defender_action(client, step, obs_dict, def_history, task="hard"):
         + "Your defense history:\n" + hist + "\n\n"
         + "Your next defensive action (JSON):"
     )
-    defender_prompt = DEFENDER_PROMPTS.get(task, DEFENDER_PROMPTS["hard"])
+    defender_prompt = DEFENDER_PROMPTS.get(get_base_difficulty(task), DEFENDER_PROMPTS["hard"])
     try:
         resp = client.chat.completions.create(
             model=MODEL_NAME,
@@ -294,9 +307,9 @@ async def run_task(client, task, base_url):
     """
     import httpx
 
-    max_steps  = MAX_STEPS[task]
-    max_reward = MAX_TOTAL_REWARD[task]
-    threshold  = SUCCESS_THRESHOLD[task]
+    max_steps  = get_max_steps(task)
+    max_reward = get_max_reward(task)
+    threshold  = get_success_thresh(task)
 
     rewards     = []
     att_history = []
@@ -475,14 +488,24 @@ async def main():
         for task in TASKS:
             score, success, steps, task_rewards = await run_task(client, task, base_url)
             all_scores.append(score)
-            print("[DEBUG] task=" + task + " score=" + ("%.2f" % score) + " success=" + str(success) + " steps=" + str(steps), flush=True)
+            status_text = "PASS" if success else "FAIL"
+            
+            def_score = 0.0
+            try:
+                async with _hx.AsyncClient(timeout=5) as _ui_cx:
+                    ui_req = await _ui_cx.get(base_url + "/ui_state")
+                    if ui_req.status_code == 200: def_score = ui_req.json().get("defender_score", 0.0)
+            except: pass
+
+            print(f"[END] {task.upper()} | Attacker Score: {score:.2f} | Defender Score: {def_score:.2f} | Status: {status_text}", flush=True)
+
             # POST result to dashboard report store
             try:
                 async with _hx.AsyncClient(timeout=5) as _rc:
                     await _rc.post(base_url + "/report_task", json={
-                        "task": task,
+                        "task": task.upper(),
                         "attacker_score": round(score, 2),
-                        "defender_score": round(1.0 - score, 2),
+                        "defender_score": round(def_score, 2),
                         "success": success,
                         "steps": steps,
                         "rewards": task_rewards,

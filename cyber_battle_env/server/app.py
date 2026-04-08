@@ -157,7 +157,7 @@ def _make_app() -> FastAPI:
     @application.get("/ui_state", tags=["meta"])
     async def ui_state():
         if not hasattr(_env, "_nodes") or not _env._nodes:
-            _env.reset("easy")
+            _env.reset("level_1")
 
         nodes = [n.to_model().dict() for n in _env._nodes.values()]
 

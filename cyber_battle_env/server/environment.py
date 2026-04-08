@@ -52,9 +52,6 @@ NODE_DEFAULTS: Dict[int, Tuple[float, float, float]] = {
     3: (0.30, 0.60, 0.70), # Database — hardened + monitored
 }
 
-MAX_TURNS:       Dict[str, int] = {"easy": 15, "medium": 20, "hard": 25}
-MAX_DETECTIONS:  Dict[str, int] = {"easy": 99, "medium": 2,  "hard": 3}
-
 # Reward table per node for successful exploit
 EXPLOIT_REWARDS: Dict[int, float] = {0: 0.02, 1: 0.35, 2: 0.25, 3: 0.20}
 
@@ -120,22 +117,38 @@ class CyberBattleEnvironment:
         self._compromised: List[int] = [0]
         self._scripted_att_idx = 0   # index into scripted attacker playbook
 
+    @property
+    def level_num(self) -> int:
+        if self._task.startswith("level_"):
+            try:
+                return int(self._task.split("_")[1])
+            except ValueError:
+                pass
+        return 1
+
+    def get_max_turns(self) -> int:
+        return 10 + (self.level_num * 2)
+
+    def get_max_detections(self) -> int:
+        if self.level_num <= 3:
+            return 99
+        if self.level_num <= 6:
+            return 2
+        if self.level_num <= 9:
+            return 3
+        return 1
+
     def reset(
         self,
-        task: str = "easy",
+        task: str = "level_1",
         seed: Optional[int] = None,
         episode_id: Optional[str] = None,
         role: str = "attacker",
         **kwargs,
     ) -> CyberBattleObservation:
-        """Start a new episode.
-        task ∈ {"easy", "medium", "hard"}
-        role ∈ {"attacker", "defender"}
-          attacker — agent controls attacker, scripted defender reacts after each step.
-          defender — agent controls defender, scripted attacker acts before each step.
-        """
-        if task not in MAX_TURNS:
-            raise ValueError(f"Unknown task '{task}'. Choose: easy | medium | hard")
+        """Start a new episode."""
+        if not task.startswith("level_"):
+            raise ValueError(f"Unknown task '{task}'. Choose: level_1 through level_10")
         if role not in ("attacker", "defender"):
             raise ValueError(f"Unknown role '{role}'. Choose: attacker | defender")
 
@@ -187,13 +200,13 @@ class CyberBattleEnvironment:
 
         obs, step_reward = self._dispatch_attacker(action)
 
-        # Scripted defender reacts after the attacker (tasks 2 & 3)
+        # Scripted defender reacts after the attacker (levels 4+)
         def_action, def_target = None, None
-        if not self._done and self._task in ("medium", "hard"):
+        if not self._done and self.level_num >= 4:
             def_action, def_target = self._scripted_defender()
 
         # Time-limit check
-        if not self._done and self._turn >= MAX_TURNS[self._task]:
+        if not self._done and self._turn >= self.get_max_turns():
             self._done = True
             step_reward = max(-0.1, step_reward - 0.1)
             obs = self._build_obs(
@@ -316,12 +329,12 @@ class CyberBattleEnvironment:
             reward += 0.05
             msg += " [STEALTH BONUS]"
 
-        # Task 1 win: web server compromised
-        if self._task == "easy" and 1 in self._compromised:
+        # First 3 levels win condition: web server compromised
+        if self.level_num <= 3 and 1 in self._compromised:
             reward += 0.5
             self._done = True
             self._winner = "attacker"
-            msg += " 🏆 Task 1 complete — Web Server compromised!"
+            msg += " 🏆 Base Phase complete — Web Server compromised!"
 
         final_reward = max(-0.2, reward)
         return self._build_obs(done=self._done, reward=final_reward, success=success, msg=msg), final_reward
@@ -383,7 +396,7 @@ class CyberBattleEnvironment:
 
         detected = self._detect(db, stealth=0.15)
 
-        if detected and self._task == "medium":
+        if detected and 4 <= self.level_num <= 6:
             self._done = True
             self._winner = "defender"
             reward = -0.3
@@ -403,7 +416,7 @@ class CyberBattleEnvironment:
     # ── scripted defender ─────────────────────────────────────────────────────
 
     def _scripted_defender(self) -> Tuple[Optional[str], Optional[int]]:
-        if self._task == "medium":
+        if self.level_num <= 6:
             return self._defender_moderate()
         return self._defender_aggressive()
 
@@ -504,7 +517,8 @@ class CyberBattleEnvironment:
 
     def _scripted_attacker_step(self):
         """Execute next scripted attacker move. Returns (action_type, result_msg)."""
-        playbook = self._ATT_PLAYBOOKS.get(self._task, self._ATT_PLAYBOOKS["easy"])
+        key = "easy" if self.level_num <= 3 else ("medium" if self.level_num <= 6 else "hard")
+        playbook = self._ATT_PLAYBOOKS.get(key, self._ATT_PLAYBOOKS["easy"])
         if self._scripted_att_idx >= len(playbook):
             return "scan", "Scripted attacker: all moves exhausted."
         atype, target = playbook[self._scripted_att_idx]
@@ -534,7 +548,7 @@ class CyberBattleEnvironment:
         step_reward += 0.05
         if self._done and self._winner == "defender":
             step_reward += 0.5
-        if not self._done and self._turn >= MAX_TURNS[self._task]:
+        if not self._done and self._turn >= self.get_max_turns():
             self._done   = True
             self._winner = "defender"
             step_reward  += 0.2
@@ -607,7 +621,7 @@ class CyberBattleEnvironment:
                 action_type="attacker_action",
                 severity=round(risk, 3),
             ))
-            limit = MAX_DETECTIONS.get(self._task, 99)
+            limit = self.get_max_detections()
             if self._detection_count >= limit and not self._done:
                 self._done = True
                 self._winner = "defender"
@@ -641,7 +655,7 @@ class CyberBattleEnvironment:
             compromised_nodes=list(self._compromised),
             task=self._task,
             turn=self._turn,
-            max_turns=MAX_TURNS.get(self._task, 20),
+            max_turns=self.get_max_turns(),
             last_action_success=success,
             last_action_message=msg,
             available_attacker_actions=available,
