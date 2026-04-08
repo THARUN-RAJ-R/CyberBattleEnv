@@ -255,7 +255,7 @@
         
         async function fetchState() {
             try {
-                const res = await fetch('/state');
+                const res = await fetch('/ui_state');
                 if (!res.ok) return;
                 const state = await res.json();
                 render(state);

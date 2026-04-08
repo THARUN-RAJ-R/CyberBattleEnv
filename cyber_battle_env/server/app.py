@@ -137,6 +137,17 @@ def _make_app() -> FastAPI:
     async def state():
         return _env.state
 
+    @application.get("/ui_state", tags=["meta"])
+    async def ui_state():
+        obs = _env.get_observation("attacker")
+        return {
+            "task": _env._task,
+            "total_reward": _env.total_reward,
+            "done": _env.is_game_over,
+            "nodes": [n.dict() for n in obs.nodes],
+            "last_action_message": obs.last_action_message
+        }
+
     # ── Defender Step (AI vs AI — hard task) ─────────────────────────────────
     # Allows the LLM defender to take an action in the environment.
     # In the hard task, inference.py calls this after each attacker step,
@@ -177,8 +188,8 @@ def _make_app() -> FastAPI:
 
     # ── Info ─────────────────────────────────────────────────────────────────
 
-    @application.get("/", tags=["meta"])
-    async def root():
+    @application.get("/status", tags=["meta"])
+    async def status():
         return {
             "name": "CyberBattleEnv",
             "version": "1.0.0",
