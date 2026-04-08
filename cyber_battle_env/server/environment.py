@@ -117,8 +117,16 @@ class CyberBattleEnvironment:
         self._compromised: List[int] = [0]
         self._scripted_att_idx = 0   # index into scripted attacker playbook
 
+    # Map task names to internal difficulty level
+    _TASK_LEVELS = {"easy": 1, "medium": 5, "hard": 8}
+    # Also support level_N aliases for backwards compat
+    VALID_TASKS = {"easy", "medium", "hard"}
+
     @property
     def level_num(self) -> int:
+        if self._task in self._TASK_LEVELS:
+            return self._TASK_LEVELS[self._task]
+        # legacy level_N support
         if self._task.startswith("level_"):
             try:
                 return int(self._task.split("_")[1])
@@ -127,28 +135,22 @@ class CyberBattleEnvironment:
         return 1
 
     def get_max_turns(self) -> int:
-        return 10 + (self.level_num * 2)
+        return {"easy": 15, "medium": 20, "hard": 25}.get(self._task, 10 + self.level_num * 2)
 
     def get_max_detections(self) -> int:
-        if self.level_num <= 3:
-            return 99
-        if self.level_num <= 6:
-            return 2
-        if self.level_num <= 9:
-            return 3
-        return 1
+        return {"easy": 99, "medium": 2, "hard": 3}.get(self._task, 99)
 
     def reset(
         self,
-        task: str = "level_1",
+        task: str = "easy",
         seed: Optional[int] = None,
         episode_id: Optional[str] = None,
         role: str = "attacker",
         **kwargs,
     ) -> CyberBattleObservation:
         """Start a new episode."""
-        if not task.startswith("level_"):
-            raise ValueError(f"Unknown task '{task}'. Choose: level_1 through level_10")
+        if task not in self.VALID_TASKS and not task.startswith("level_"):
+            raise ValueError(f"Unknown task '{task}'. Choose: easy | medium | hard")
         if role not in ("attacker", "defender"):
             raise ValueError(f"Unknown role '{role}'. Choose: attacker | defender")
 
@@ -517,7 +519,9 @@ class CyberBattleEnvironment:
 
     def _scripted_attacker_step(self):
         """Execute next scripted attacker move. Returns (action_type, result_msg)."""
-        key = "easy" if self.level_num <= 3 else ("medium" if self.level_num <= 6 else "hard")
+        key = self._task if self._task in self._ATT_PLAYBOOKS else (
+            "easy" if self.level_num <= 3 else ("medium" if self.level_num <= 6 else "hard")
+        )
         playbook = self._ATT_PLAYBOOKS.get(key, self._ATT_PLAYBOOKS["easy"])
         if self._scripted_att_idx >= len(playbook):
             return "scan", "Scripted attacker: all moves exhausted."

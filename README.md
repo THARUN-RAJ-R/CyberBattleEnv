@@ -17,7 +17,9 @@ tags:
 # CyberBattleEnv
 
 > Multi-agent cybersecurity RL environment for LLM training and evaluation.
-> Built for the OpenEnv hackathon — simulates a real enterprise network breach.
+> Built for the OpenEnv hackathon — simulates **real penetration testing work**:
+> network reconnaissance, vulnerability exploitation, and data exfiltration —
+> the exact workflows performed by red-team security professionals daily.
 
 [![OpenEnv](https://img.shields.io/badge/OpenEnv-compatible-blue)](https://github.com/meta-pytorch/OpenEnv)
 [![HF Spaces](https://img.shields.io/badge/HuggingFace-Spaces-yellow)](https://huggingface.co/spaces)
@@ -182,7 +184,7 @@ Expected output format:
 [START] task=easy env=cyber-battle-env model=Qwen/Qwen2.5-72B-Instruct
 [STEP] step=1 action={"action_type":"scan","target_node":1} reward=0.05 done=false error=null
 [STEP] step=2 action={"action_type":"exploit","target_node":1} reward=0.85 done=true error=null
-[END] success=true steps=2 score=0.944 rewards=0.05,0.85
+[END] success=true steps=2 score=0.94 rewards=0.05,0.85
 ```
 
 ### Python Client

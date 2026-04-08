@@ -5,8 +5,7 @@ inference.py -- CyberBattleEnv Baseline Inference Script
 MANDATORY ENV VARS (per OpenEnv spec):
   API_BASE_URL        OpenAI-compatible endpoint
   MODEL_NAME          Model identifier
-  HF_TOKEN            Hugging Face / API key
-  IMAGE_NAME          Local Docker image name (optional)
+  HF_TOKEN            Hugging Face / API key (mandatory)
   ENV_BASE_URL        Running environment URL (default: http://localhost:8000)
 
 STDOUT FORMAT (exact):
@@ -15,9 +14,9 @@ STDOUT FORMAT (exact):
   [END]   success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...,rn>
 
 Tasks (ALL are TRUE AI vs AI — LLM Attacker vs LLM Defender):
-  easy        - LLM Attacker vs Passive LLM Defender   (junior analyst, patch only)
-  medium      - LLM Attacker vs Moderate LLM Defender  (engineer, patch+monitor+restore)
-  hard        - LLM Attacker vs Aggressive LLM Defender (full arsenal, rapid response)
+  easy   - LLM Attacker vs Passive LLM Defender   (junior analyst, patch only)
+  medium - LLM Attacker vs Moderate LLM Defender  (engineer, patch+monitor+restore)
+  hard   - LLM Attacker vs Aggressive LLM Defender (full arsenal, rapid response)
 """
 
 from __future__ import annotations
@@ -34,41 +33,30 @@ from typing import List, Optional
 from openai import OpenAI
 
 # ── Mandatory env vars (per spec) ────────────────────────────────────────────
-API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME   = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN     = os.getenv("HF_TOKEN")
+API_BASE_URL     = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME       = os.getenv("MODEL_NAME",   "Qwen/Qwen2.5-72B-Instruct")
+HF_TOKEN         = os.getenv("HF_TOKEN")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
-ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:8000")
+ENV_BASE_URL     = os.getenv("ENV_BASE_URL", "http://localhost:8000")
+
+if HF_TOKEN is None:
+    raise ValueError("HF_TOKEN environment variable is required")
 
 BENCHMARK = "cyber-battle-env"
 
-# ── Task config ────────────────────────────────────────────────────────────
-TASKS = [f"level_{i}" for i in range(1, 11)]
+# ── Task config ───────────────────────────────────────────────────────────────
+TASKS = ["easy", "medium", "hard"]
 
-def get_base_difficulty(task: str) -> str:
-    try:
-        level = int(task.split("_")[1])
-    except:
-        level = 1
-    if level <= 3: return "easy"
-    if level <= 6: return "medium"
-    return "hard"
-
-def get_max_steps(task: str) -> int:
-    try: return 10 + (int(task.split("_")[1]) * 2)
-    except: return 20
-
-def get_max_reward(task: str) -> float: return 1.0
-def get_success_thresh(task: str) -> float: return 0.3
+TASK_CONFIG = {
+    "easy":   {"max_steps": 15, "max_reward": 0.9,  "threshold": 0.3},
+    "medium": {"max_steps": 20, "max_reward": 1.0,  "threshold": 0.3},
+    "hard":   {"max_steps": 25, "max_reward": 1.0,  "threshold": 0.3},
+}
 
 TEMPERATURE = 0.4
 MAX_TOKENS  = 200
 
-# ── ATTACKER system prompts (scales with task difficulty) ─────────────────
-# easy:   Junior Attacker -> 1v1 vs Junior Analyst
-# medium: Advanced Attacker -> 1v1 vs Security Engineer
-# hard:   Elite Nation-State Attacker -> 1v1 vs Aggressive AI Defender
-
+# ── ATTACKER system prompts ───────────────────────────────────────────────────
 _BASE_ATTACKER = """
 NETWORK:
   Node 0: User Workstation (start — already compromised)
@@ -93,23 +81,19 @@ ATTACKER_PROMPTS = {
     You are a JUNIOR script-kiddie hacker. You are attacking a junior analyst.
     Keep it simple. Scan and exploit the first server you find.
     """ + _BASE_ATTACKER).strip(),
-    
+
     "medium": textwrap.dedent("""
     You are a PERSISTENT THREAT hacker. You are battling a skilled Security Engineer.
     Move stealthily, hop between machines, and target the database.
     """ + _BASE_ATTACKER).strip(),
-    
+
     "hard": textwrap.dedent("""
     You are an ELITE AI NATION-STATE ATTACKER. You are battling an aggressive elite Defender AI.
     Move fast, escalate privileges, and deceive the defender. Time is against you.
-    """ + _BASE_ATTACKER).strip()
+    """ + _BASE_ATTACKER).strip(),
 }
 
-# ── DEFENDER system prompts (scales with task difficulty) ─────────────────
-# easy:   Passive LLM — only patches, never isolates. Training wheels.
-# medium: Moderate LLM — patches + monitors, rare isolation.
-# hard:   Aggressive LLM — full arsenal, rapid response.
-
+# ── DEFENDER system prompts ───────────────────────────────────────────────────
 DEFENDER_PROMPTS = {
     "easy": textwrap.dedent("""
     You are a JUNIOR security analyst protecting a corporate network.
@@ -173,85 +157,79 @@ DEFENDER_PROMPTS = {
 }
 
 
-# ── Logging (exact spec format) ────────────────────────────────────────────
+# ── Logging (exact spec format) ───────────────────────────────────────────────
 
-def log_start(task, model):
-    print("[START] task=" + task + " env=" + BENCHMARK + " model=" + model, flush=True)
+def log_start(task: str, model: str) -> None:
+    print(f"[START] task={task} env={BENCHMARK} model={model}", flush=True)
 
-def log_step(step, action, reward, done, error):
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
     err_s  = str(error) if error else "null"
     done_s = "true" if done else "false"
     print(
-        "[STEP] step=" + str(step)
-        + " action=" + str(action)
-        + " reward=" + ("%.2f" % reward)
-        + " done=" + done_s
-        + " error=" + err_s,
+        f"[STEP] step={step} action={action}"
+        f" reward={reward:.2f} done={done_s} error={err_s}",
         flush=True,
     )
 
-def log_end(success, steps, score, rewards):
-    rws = ",".join(("%.2f" % r) for r in rewards)
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+    rws = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        "[END] success=" + ("true" if success else "false")
-        + " steps=" + str(steps)
-        + " score=" + ("%.2f" % score)
-        + " rewards=" + rws,
+        f"[END] success={'true' if success else 'false'}"
+        f" steps={steps} score={score:.2f} rewards={rws}",
         flush=True,
     )
 
 
-# ── LLM helpers ───────────────────────────────────────────────────────────
+# ── LLM helpers ───────────────────────────────────────────────────────────────
 
 def _extract_json(raw: str) -> str:
     match = re.search(r'\{[^}]+\}', raw, re.DOTALL)
     return match.group(0) if match else raw
 
-def _parse_node(raw_json: str, default_type: str, default_node: int):
+def _parse_action(raw_json: str, default_type: str, default_node: int):
     try:
         d = json.loads(raw_json)
         return str(d.get("action_type", default_type)), int(d.get("target_node", default_node)), None
     except Exception as e:
         return default_type, default_node, str(e)
 
-def _build_network_block(obs_dict: dict) -> str:
+def _build_network_block(obs: dict) -> str:
     lines = []
-    for n in obs_dict.get("nodes", []):
+    for n in obs.get("nodes", []):
         status   = "COMPROMISED" if n["is_compromised"] else "intact"
-        isolated = " [ISOLATED]"  if n.get("is_isolated")  else ""
+        isolated = " [ISOLATED]" if n.get("is_isolated") else ""
         lines.append(
-            "  Node " + str(n["node_id"]) + " " + n["name"]
-            + ": vuln=" + ("%.2f" % n["vulnerability_level"])
-            + " patch=" + ("%.2f" % n["patch_level"])
-            + " det=" + ("%.2f" % n["detection_risk"])
-            + " — " + status + isolated
+            f"  Node {n['node_id']} {n['name']}"
+            f": vuln={n['vulnerability_level']:.2f}"
+            f" patch={n['patch_level']:.2f}"
+            f" det={n['detection_risk']:.2f}"
+            f" — {status}{isolated}"
         )
     return "\n".join(lines)
 
 
-def get_attacker_action(client, step, obs_dict, history, task="hard"):
-    """Ask LLM for attacker move. Returns (action_str, error)."""
-    net   = _build_network_block(obs_dict)
-    avail = ", ".join(obs_dict.get("available_attacker_actions", []))
-    pos   = obs_dict.get("attacker_position", 0)
-    det   = obs_dict.get("detection_count", 0)
+def get_attacker_action(client: OpenAI, step: int, obs: dict, history: List[str], task: str):
+    """Ask LLM for attacker move. Returns (action_json_str, error)."""
+    net   = _build_network_block(obs)
+    avail = ", ".join(obs.get("available_attacker_actions", []))
+    pos   = obs.get("attacker_position", 0)
+    det   = obs.get("detection_count", 0)
     hist  = "\n".join(history[-5:]) if history else "None"
-    msg   = obs_dict.get("last_action_message", "")
+    msg   = obs.get("last_action_message", "")
 
     prompt = (
-        "Step " + str(step) + " | Your position: Node " + str(pos)
-        + " | Times detected: " + str(det) + "\n"
-        + "Last result: " + msg + "\n\n"
-        + "Network:\n" + net + "\n\n"
-        + "Available actions: " + avail + "\n\n"
-        + "History:\n" + hist + "\n\n"
-        + "Your next action (JSON):"
+        f"Step {step} | Your position: Node {pos} | Times detected: {det}\n"
+        f"Last result: {msg}\n\n"
+        f"Network:\n{net}\n\n"
+        f"Available actions: {avail}\n\n"
+        f"History:\n{hist}\n\n"
+        "Your next action (JSON):"
     )
     try:
         resp = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": ATTACKER_PROMPTS.get(get_base_difficulty(task), ATTACKER_PROMPTS["hard"])},
+                {"role": "system", "content": ATTACKER_PROMPTS.get(task, ATTACKER_PROMPTS["hard"])},
                 {"role": "user",   "content": prompt},
             ],
             temperature=TEMPERATURE, max_tokens=MAX_TOKENS, stream=False,
@@ -262,30 +240,27 @@ def get_attacker_action(client, step, obs_dict, history, task="hard"):
         return '{"action_type":"scan","target_node":1}', str(e)
 
 
-def get_defender_action(client, step, obs_dict, def_history, task="hard"):
-    """Ask LLM for defender move. Difficulty scales with task.
-    easy=passive, medium=moderate, hard=aggressive.
-    """
-    net       = _build_network_block(obs_dict)
-    att_pos   = obs_dict.get("attacker_position", 0)
-    det_count = obs_dict.get("detection_count", 0)
-    comp      = obs_dict.get("compromised_nodes", [])
-    hist      = "\n".join(def_history[-5:]) if def_history else "None"
+def get_defender_action(client: OpenAI, step: int, obs: dict, history: List[str], task: str):
+    """Ask LLM for defender move. Returns (action_json_str, error)."""
+    net       = _build_network_block(obs)
+    att_pos   = obs.get("attacker_position", 0)
+    det_count = obs.get("detection_count", 0)
+    comp      = obs.get("compromised_nodes", [])
+    hist      = "\n".join(history[-5:]) if history else "None"
 
     prompt = (
-        "Step " + str(step) + " | Attacker position: Node " + str(att_pos)
-        + " | Attacker detections: " + str(det_count) + "\n"
-        + "Compromised nodes: " + str(comp) + "\n\n"
-        + "Network status:\n" + net + "\n\n"
-        + "Your defense history:\n" + hist + "\n\n"
-        + "Your next defensive action (JSON):"
+        f"Step {step} | Attacker position: Node {att_pos}"
+        f" | Attacker detections: {det_count}\n"
+        f"Compromised nodes: {comp}\n\n"
+        f"Network status:\n{net}\n\n"
+        f"Your defense history:\n{hist}\n\n"
+        "Your next defensive action (JSON):"
     )
-    defender_prompt = DEFENDER_PROMPTS.get(get_base_difficulty(task), DEFENDER_PROMPTS["hard"])
     try:
         resp = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": defender_prompt},
+                {"role": "system", "content": DEFENDER_PROMPTS.get(task, DEFENDER_PROMPTS["hard"])},
                 {"role": "user",   "content": prompt},
             ],
             temperature=TEMPERATURE, max_tokens=MAX_TOKENS, stream=False,
@@ -296,64 +271,59 @@ def get_defender_action(client, step, obs_dict, def_history, task="hard"):
         return '{"action_type":"monitor","target_node":3}', str(e)
 
 
-# ── Single task runner ────────────────────────────────────────────────────
+# ── Single task runner ────────────────────────────────────────────────────────
 
-async def run_task(client, task, base_url):
+async def run_task(client: OpenAI, task: str, base_url: str):
     """
-    Run one full episode.
-    - easy/medium: LLM Attacker vs scripted defender (in environment)
-    - hard:        LLM Attacker vs LLM Defender (TRUE AI vs AI)
-                   Defender action is sent via POST /defender_step
+    Run one full episode of the given task.
+    Each turn: LLM acts as ATTACKER → env.step() → LLM acts as DEFENDER → /defender_step.
+    Returns (score, success, steps_taken, rewards).
     """
     import httpx
 
-    max_steps  = get_max_steps(task)
-    max_reward = get_max_reward(task)
-    threshold  = get_success_thresh(task)
+    cfg        = TASK_CONFIG[task]
+    max_steps  = cfg["max_steps"]
+    max_reward = cfg["max_reward"]
+    threshold  = cfg["threshold"]
 
-    rewards     = []
-    att_history = []
-    def_history = []
+    rewards     : List[float] = []
+    att_history : List[str]   = []
+    def_history : List[str]   = []
     steps_taken = 0
     score       = 0.0
     success     = False
-    last_error  = None
-
-    # ALL tasks now use TRUE AI vs AI
-    is_ai_vs_ai = True
+    last_error  : Optional[str] = None
 
     log_start(task=task, model=MODEL_NAME)
-    defender_level = {"easy": "passive", "medium": "moderate", "hard": "aggressive"}.get(task, "moderate")
-    print("[DEBUG] AI vs AI | task=" + task + " | defender_level=" + defender_level, flush=True)
+    print(f"[DEBUG] TRUE AI vs AI | task={task}", flush=True)
 
     async with httpx.AsyncClient(base_url=base_url, timeout=60.0, verify=False) as http:
 
-        # ── reset ──────────────────────────────────────────────────────────
+        # ── reset ────────────────────────────────────────────────────────────
         try:
             r = await http.post("/reset", json={"task": task, "seed": 42})
             r.raise_for_status()
-            obs_dict = r.json()
+            obs = r.json()
         except Exception as exc:
             log_end(success=False, steps=0, score=0.0, rewards=[])
-            print("[DEBUG] reset failed: " + str(exc), flush=True)
+            print(f"[DEBUG] reset failed: {exc}", flush=True)
             return 0.0, False, 0, []
 
-        done = bool(obs_dict.get("done", False))
+        done = bool(obs.get("done", False))
 
         try:
             for step in range(1, max_steps + 1):
                 if done:
                     break
 
-                # ── ATTACKER turn (LLM) ────────────────────────────────
-                raw_att, att_err = get_attacker_action(client, step, obs_dict, att_history, task)
-                atype, target, parse_err = _parse_node(raw_att, "scan", 1)
+                # ── ATTACKER turn ─────────────────────────────────────────
+                raw_att, att_err = get_attacker_action(client, step, obs, att_history, task)
+                atype, target, parse_err = _parse_action(raw_att, "scan", 1)
                 last_error = att_err or parse_err
 
-                att_action_str = ('{"action_type":"' + atype
-                                  + '","target_node":' + str(target) + '}')
+                att_action_str = f'{{"action_type":"{atype}","target_node":{target}}}'
 
-                # Send attacker action with retry for HF multi-worker
+                # Send with retry for HF multi-worker
                 obs_new = None
                 for attempt in range(2):
                     try:
@@ -367,7 +337,7 @@ async def run_task(client, task, base_url):
                             continue
                         r.raise_for_status()
                         obs_new = r.json()
-                        if ("ended" in obs_new.get("last_action_message","").lower()
+                        if ("ended" in obs_new.get("last_action_message", "").lower()
                                 and not obs_new.get("done") and attempt == 0):
                             await http.post("/reset", json={"task": task, "seed": 42})
                             await asyncio.sleep(0.5)
@@ -385,16 +355,15 @@ async def run_task(client, task, base_url):
                 if obs_new is None:
                     break
 
-                obs_dict    = obs_new
-                att_reward  = float(obs_dict.get("reward") or 0.0)
-                done        = bool(obs_dict.get("done", False))
-                att_msg     = obs_dict.get("last_action_message", "")
+                obs         = obs_new
+                att_reward  = float(obs.get("reward") or 0.0)
+                done        = bool(obs.get("done", False))
+                att_msg     = obs.get("last_action_message", "")
 
                 rewards.append(att_reward)
                 steps_taken = step
                 att_history.append(
-                    "Step " + str(step) + ": " + att_action_str
-                    + " reward=" + str(round(att_reward, 2)) + " | " + att_msg
+                    f"Step {step}: {att_action_str} reward={round(att_reward, 2)} | {att_msg}"
                 )
 
                 log_step(step=step, action=att_action_str, reward=att_reward,
@@ -404,13 +373,11 @@ async def run_task(client, task, base_url):
                 if done:
                     break
 
-                # ── DEFENDER turn (LLM — only on hard task) ───────────
-                if is_ai_vs_ai and not done:
-                    raw_def, def_err = get_defender_action(client, step, obs_dict, def_history, task)
-                    def_atype, def_target, _ = _parse_node(raw_def, "monitor", 3)
-
-                    def_action_str = ('{"action_type":"' + def_atype
-                                      + '","target_node":' + str(def_target) + '}')
+                # ── DEFENDER turn ─────────────────────────────────────────
+                if not done:
+                    raw_def, def_err = get_defender_action(client, step, obs, def_history, task)
+                    def_atype, def_target, _ = _parse_action(raw_def, "monitor", 3)
+                    def_action_str = f'{{"action_type":"{def_atype}","target_node":{def_target}}}'
 
                     try:
                         dr = await http.post(
@@ -418,15 +385,12 @@ async def run_task(client, task, base_url):
                             json={"action_type": def_atype, "target_node": def_target, "last_task": task},
                         )
                         if dr.status_code == 200:
-                            obs_dict = dr.json()
-                            done = bool(obs_dict.get("done", False))
-                            def_history.append(
-                                "Step " + str(step) + " DEF: " + def_action_str
-                            )
-                            print("[DEBUG] Defender: " + def_action_str, flush=True)
+                            obs = dr.json()
+                            done = bool(obs.get("done", False))
+                            def_history.append(f"Step {step} DEF: {def_action_str}")
+                            print(f"[DEBUG] Defender: {def_action_str}", flush=True)
                     except Exception as def_exc:
-                        # Defender endpoint optional — fall back to scripted
-                        print("[DEBUG] defender_step unavailable, using scripted: " + str(def_exc)[:60], flush=True)
+                        print(f"[DEBUG] defender_step unavailable: {str(def_exc)[:60]}", flush=True)
 
         finally:
             total   = sum(rewards)
@@ -437,19 +401,19 @@ async def run_task(client, task, base_url):
     return score, success, steps_taken, rewards
 
 
-# ── Docker container launcher ─────────────────────────────────────────────
+# ── Docker launcher (optional) ────────────────────────────────────────────────
 
-async def _start_docker(image_name, port=8000):
-    print("[DEBUG] Launching Docker container: " + image_name, flush=True)
+async def _start_docker(image_name: str, port: int = 8000):
+    print(f"[DEBUG] Launching Docker container: {image_name}", flush=True)
     result = subprocess.run(
-        ["docker", "run", "-d", "-p", str(port) + ":8000", image_name],
+        ["docker", "run", "-d", "-p", f"{port}:8000", image_name],
         capture_output=True, text=True, check=True,
     )
     container_id = result.stdout.strip()
-    print("[DEBUG] Container " + container_id[:12] + " started", flush=True)
+    print(f"[DEBUG] Container {container_id[:12]} started", flush=True)
 
     import httpx
-    base = "http://localhost:" + str(port)
+    base = f"http://localhost:{port}"
     deadline = time.time() + 45
     async with httpx.AsyncClient(verify=False) as hc:
         while time.time() < deadline:
@@ -463,60 +427,74 @@ async def _start_docker(image_name, port=8000):
     raise RuntimeError("Container did not become healthy in time")
 
 
-# ── Main ──────────────────────────────────────────────────────────────────
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 async def main():
     """
-    ONE episode per task. Each turn:
-      LLM makes ATTACKER decision -> POST /step
-      LLM (different prompt) makes DEFENDER decision -> POST /defender_step
-    Both happen in the SAME game, every turn.
+    Run one episode per task (easy → medium → hard).
+    Each turn: LLM reasons as ATTACKER + LLM reasons as DEFENDER.
     TRUE simultaneous AI vs AI.
     """
     client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
     container_id = None
     base_url = ENV_BASE_URL
+
     if LOCAL_IMAGE_NAME:
         container_id, base_url = await _start_docker(LOCAL_IMAGE_NAME)
+
     try:
-        print("[DEBUG] === TRUE AI vs AI: One agent, two minds, one battlefield ===", flush=True)
-        print("[DEBUG] Every turn: LLM reasons as ATTACKER + LLM reasons as DEFENDER", flush=True)
-        print("[DEBUG] Same model, independent system prompts, one game per task", flush=True)
+        print("[DEBUG] === CyberBattleEnv: TRUE AI vs AI ===", flush=True)
+        print(f"[DEBUG] Tasks: {TASKS}", flush=True)
+        print(f"[DEBUG] Model: {MODEL_NAME}", flush=True)
         print("", flush=True)
+
         all_scores = []
         import httpx as _hx
+
         for task in TASKS:
             score, success, steps, task_rewards = await run_task(client, task, base_url)
             all_scores.append(score)
-            status_text = "PASS" if success else "FAIL"
-            
+            status_label = "PASS" if success else "FAIL"
+
+            # Fetch defender score from server
             def_score = 0.0
             try:
-                async with _hx.AsyncClient(timeout=5) as _ui_cx:
-                    ui_req = await _ui_cx.get(base_url + "/ui_state")
-                    if ui_req.status_code == 200: def_score = ui_req.json().get("defender_score", 0.0)
-            except: pass
+                async with _hx.AsyncClient(timeout=5) as cx:
+                    ui = await cx.get(base_url + "/ui_state")
+                    if ui.status_code == 200:
+                        def_score = ui.json().get("defender_score", 0.0)
+            except Exception:
+                pass
 
-            print(f"[END] {task.upper()} | Attacker: {score:.2f} | Defender: {def_score:.2f} | Status: {status_text} | Tracker: {task_rewards}", flush=True)
+            print(
+                f"[RESULT] {task.upper()} | Attacker: {score:.2f}"
+                f" | Defender: {def_score:.2f}"
+                f" | Status: {status_label}"
+                f" | Steps: {steps}",
+                flush=True,
+            )
 
-            # POST result to dashboard report store
+            # POST result to dashboard
             try:
-                async with _hx.AsyncClient(timeout=5) as _rc:
-                    await _rc.post(base_url + "/report_task", json={
-                        "task": task.upper(),
+                async with _hx.AsyncClient(timeout=5) as cx:
+                    await cx.post(base_url + "/report_task", json={
+                        "task":           task.upper(),
                         "attacker_score": round(score, 2),
                         "defender_score": round(def_score, 2),
-                        "success": success,
-                        "steps": steps,
-                        "rewards": task_rewards,
+                        "success":        success,
+                        "steps":          steps,
+                        "rewards":        task_rewards,
                     })
             except Exception:
                 pass
+
             print("", flush=True)
+
         avg = sum(all_scores) / len(all_scores) if all_scores else 0.0
-        print("[DEBUG] ===================================================", flush=True)
-        print("[DEBUG] OVERALL SCORE: " + ("%.2f" % avg) + " (" + ("%.0f" % (avg*100)) + "%)", flush=True)
-        print("[DEBUG] ===================================================", flush=True)
+        print("=" * 50, flush=True)
+        print(f"[DEBUG] OVERALL SCORE: {avg:.2f} ({avg * 100:.0f}%)", flush=True)
+        print("=" * 50, flush=True)
+
     finally:
         if container_id:
             subprocess.run(["docker", "stop", container_id], check=False, capture_output=True)
