@@ -471,10 +471,24 @@ async def main():
         print("[DEBUG] Same model, independent system prompts, one game per task", flush=True)
         print("", flush=True)
         all_scores = []
+        import httpx as _hx
         for task in TASKS:
             score, success, steps, task_rewards = await run_task(client, task, base_url)
             all_scores.append(score)
             print("[DEBUG] task=" + task + " score=" + ("%.2f" % score) + " success=" + str(success) + " steps=" + str(steps), flush=True)
+            # POST result to dashboard report store
+            try:
+                async with _hx.AsyncClient(timeout=5) as _rc:
+                    await _rc.post(base_url + "/report_task", json={
+                        "task": task,
+                        "attacker_score": round(score, 2),
+                        "defender_score": round(1.0 - score, 2),
+                        "success": success,
+                        "steps": steps,
+                        "rewards": task_rewards,
+                    })
+            except Exception:
+                pass
             print("", flush=True)
         avg = sum(all_scores) / len(all_scores) if all_scores else 0.0
         print("[DEBUG] ===================================================", flush=True)

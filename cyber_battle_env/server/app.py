@@ -137,23 +137,41 @@ def _make_app() -> FastAPI:
     async def state():
         return _env.state
 
+    # ── Shared task report store ──────────────────────────────────────────────
+    # Stored as a module-level list so inference.py can POST completed results.
+    _task_report: list = []
+
+    @application.post("/report_task", tags=["meta"])
+    async def report_task(data: dict):
+        """Called by inference.py after each task completes to log results."""
+        _task_report.append(data)
+        return {"ok": True, "count": len(_task_report)}
+
     @application.get("/ui_state", tags=["meta"])
     async def ui_state():
         if not hasattr(_env, "_nodes") or not _env._nodes:
             _env.reset("easy")
-            
+
         nodes = [n.to_model().dict() for n in _env._nodes.values()]
-        
-        msg = "Simulation Active..."
+
+        # Compute a live "defender score" as 1 - fraction of nodes compromised
+        total_nodes = len(nodes)
+        compromised = sum(1 for n in nodes if n.get("is_compromised", False))
+        defender_score = round(1.0 - (compromised / max(total_nodes, 1)), 2)
+        attacker_score = round(getattr(_env, "_total_reward", 0.0), 2)
+
+        msg = getattr(_env, "_last_msg", "Simulation Active...")
         if getattr(_env, "_done", False):
-            msg = "[SYSTEM] Simulation Terminated. State frozen."
+            msg = "[SYSTEM] Episode Ended. Awaiting next task..."
 
         return {
             "task": getattr(_env, "_task", "easy"),
-            "total_reward": getattr(_env, "_total_reward", 0.0),
+            "attacker_score": attacker_score,
+            "defender_score": defender_score,
             "done": getattr(_env, "_done", False),
             "nodes": nodes,
-            "last_action_message": msg
+            "last_action_message": msg,
+            "task_report": _task_report,
         }
 
     # ── Defender Step (AI vs AI — hard task) ─────────────────────────────────

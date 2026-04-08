@@ -42,6 +42,7 @@
             align-items: center;
             background: rgba(0,0,0,0.3);
             backdrop-filter: blur(10px);
+            flex-shrink: 0;
         }
 
         h1 {
@@ -70,9 +71,11 @@
         main {
             display: grid;
             grid-template-columns: 1fr 350px;
+            grid-template-rows: 1fr auto;
             gap: 1.5rem;
             padding: 1.5rem;
             flex: 1;
+            min-height: 0;
         }
 
         .panel {
@@ -86,6 +89,11 @@
             overflow: hidden;
         }
 
+        .panel-full {
+            grid-column: 1 / -1;
+            max-height: 300px;
+        }
+
         .panel-header {
             padding: 1rem;
             border-bottom: 1px solid var(--border);
@@ -96,6 +104,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
         }
 
         /* Network Topology */
@@ -106,6 +115,7 @@
             justify-content: center;
             position: relative;
             padding: 2rem;
+            min-height: 0;
         }
 
         .nodes-container {
@@ -130,7 +140,7 @@
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
 
-        .node::after { /* connection line */
+        .node::after {
             content: '';
             position: absolute;
             right: -4.2rem;
@@ -192,6 +202,7 @@
             display: flex;
             flex-direction: column;
             gap: 0.6rem;
+            min-height: 0;
         }
         .log-entry { opacity: 0; animation: fade-in 0.4s forwards; }
         .log-time { color: var(--dim); margin-right: 0.5rem; }
@@ -212,6 +223,29 @@
         .len-item { display: flex; align-items: center; gap: 5px; }
         .dot { width: 8px; height: 8px; border-radius: 50%; }
 
+        /* Report Table */
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        .report-table th, .report-table td {
+            padding: 0.8rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .report-table th {
+            color: var(--dim);
+            font-family: var(--font-display);
+            letter-spacing: 1px;
+            font-size: 0.8rem;
+        }
+        .report-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+        }
+
     </style>
 </head>
 <body>
@@ -222,9 +256,10 @@
             <span style="font-size:0.6rem; opacity:0.6; padding:3px 8px; border:1px solid #fff; border-radius:15px">LIVE SIMULATION</span>
         </h1>
         <div class="badges">
-            <div class="badge">TASK BINDING: <span id="b-task" style="color:#fff">--</span></div>
-            <div class="badge b-hacker">ATTACKER REWARD: <span id="b-reward">0.00</span></div>
-            <div class="badge b-defender">DEFENDER: <span id="b-done">MONITORING</span></div>
+            <div class="badge">TASK: <span id="b-task" style="color:#fff">--</span></div>
+            <div class="badge b-hacker">ATTACKER SCORE: <span id="b-att-score">0.00</span></div>
+            <div class="badge b-defender">DEFENDER SCORE: <span id="b-def-score">0.00</span></div>
+            <div class="badge">STATUS: <span id="b-done">MONITORING</span></div>
         </div>
     </header>
 
@@ -248,6 +283,26 @@
             <div class="logs-container" id="logs">
             </div>
         </div>
+
+        <!-- Dynamic Final Report Panel -->
+        <div class="panel panel-full" id="report-panel" style="display: none;">
+            <div class="panel-header">CAMPAIGN REPORT (ALL TASKS)</div>
+            <div class="report-container">
+                <table class="report-table">
+                    <thead>
+                        <tr>
+                            <th>TASK</th>
+                            <th>ATTACKER SCORE</th>
+                            <th>DEFENDER SCORE</th>
+                            <th>STEPS TAKEN</th>
+                            <th>ATTACK SUCCESS</th>
+                        </tr>
+                    </thead>
+                    <tbody id="report-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </main>
 
     <script>
@@ -265,10 +320,12 @@
         }
 
         let lastMessage = "";
+        let reportedTasks = new Set();
 
         function render(state) {
             document.getElementById('b-task').innerText = (state.task || "EASY").toUpperCase();
-            document.getElementById('b-reward').innerText = state.total_reward.toFixed(2);
+            document.getElementById('b-att-score').innerText = (state.attacker_score || 0).toFixed(2);
+            document.getElementById('b-def-score').innerText = (state.defender_score || 0).toFixed(2);
             document.getElementById('b-done').innerText = state.done ? "EPISODE ENDED" : "AI COMBAT ACTIVE";
 
             const container = document.getElementById('nodes-container');
@@ -306,6 +363,27 @@
                 div.innerHTML = `<span class="log-time">[${now}]</span> <span style="${colorStyle}">${lastMessage}</span>`;
                 logs.appendChild(div);
                 logs.scrollTop = logs.scrollHeight;
+            }
+
+            // Render Report Table if exists
+            if (state.task_report && state.task_report.length > 0) {
+                document.getElementById('report-panel').style.display = 'flex';
+                const body = document.getElementById('report-body');
+                
+                state.task_report.forEach(report => {
+                    if (!reportedTasks.has(report.task)) {
+                        reportedTasks.add(report.task);
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><strong style="color:#fff">${report.task.toUpperCase()}</strong></td>
+                            <td style="color:var(--hacker)">${report.attacker_score.toFixed(2)}</td>
+                            <td style="color:var(--defender)">${report.defender_score.toFixed(2)}</td>
+                            <td>${report.steps}</td>
+                            <td>${report.success ? '<span style="color:#2ecc71">PASS</span>' : '<span style="color:#e74c3c">FAIL</span>'}</td>
+                        `;
+                        body.appendChild(tr);
+                    }
+                });
             }
         }
 
