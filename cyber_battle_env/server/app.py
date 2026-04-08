@@ -144,12 +144,13 @@ def _make_app() -> FastAPI:
     @application.post("/report_task", tags=["meta"])
     async def report_task(data: dict):
         """Called by inference.py after each task completes to log results."""
-        if hasattr(_env, "_nodes") and _env._nodes:
+        if hasattr(_env, "_defender_reward"):
+            data["defender_score"] = max(0.00, min(round(_env._defender_reward, 2), 1.00))
+        elif hasattr(_env, "_nodes") and _env._nodes:
             nodes = _env._nodes.values()
             total_nodes = len(nodes)
             compromised = sum(1 for n in nodes if getattr(n, "is_compromised", False))
             data["defender_score"] = round(1.0 - (compromised / max(total_nodes, 1)), 2)
-            
         _task_report.append(data)
         return {"ok": True, "count": len(_task_report)}
 
@@ -160,10 +161,9 @@ def _make_app() -> FastAPI:
 
         nodes = [n.to_model().dict() for n in _env._nodes.values()]
 
-        # Compute a live "defender score" as 1 - fraction of nodes compromised
-        total_nodes = len(nodes)
-        compromised = sum(1 for n in nodes if n.get("is_compromised", False))
-        defender_score = round(1.0 - (compromised / max(total_nodes, 1)), 2)
+        # Dynamically scale Defender performance using tracking reward
+        raw_defender = getattr(_env, "_defender_reward", 0.0)
+        defender_score = max(0.00, min(round(raw_defender, 2), 1.00))
         raw_attacker = getattr(_env, "_total_reward", 0.0)
         attacker_score = max(0.00, min(round(raw_attacker, 2), 1.00))
 

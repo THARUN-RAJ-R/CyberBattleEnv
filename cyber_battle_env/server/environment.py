@@ -148,6 +148,7 @@ class CyberBattleEnvironment:
         self._done = False
         self._winner = None
         self._total_reward = 0.0
+        self._defender_reward = 0.0
         self._attacker_pos = 0
         self._compromised = [0]
         self._episode_id = episode_id or str(uuid.uuid4())
@@ -407,43 +408,59 @@ class CyberBattleEnvironment:
         """
         node = self._nodes.get(target_node)
         msg  = "Defender: "
+        gained = 0.0
 
         if action_type == "patch":
             if node:
                 node.patch_level         = min(1.0, node.patch_level + 0.25)
                 node.vulnerability_level = max(0.0, node.vulnerability_level - 0.20)
                 msg += "Patched " + node.name
+                gained = 0.10
             else:
                 msg += "patch failed — bad node"
+                gained = -0.05
         elif action_type == "monitor":
             if node:
                 node.is_monitored   = True
                 node.detection_risk = min(1.0, node.detection_risk + 0.25)
                 msg += "Monitoring " + node.name
+                gained = 0.05
             else:
                 msg += "monitor failed — bad node"
+                gained = -0.05
         elif action_type == "isolate":
             if node and target_node != 0:
                 node.is_isolated = True
                 msg += "Isolated " + node.name
+                gained = 0.15
             else:
                 msg += "isolate failed — invalid target"
+                gained = -0.05
         elif action_type == "restore":
             if node and target_node in self._compromised and target_node != 0:
                 node.is_compromised = False
                 self._compromised.remove(target_node)
                 msg += "Restored " + node.name
+                gained = 0.30
             else:
                 msg += "restore failed — not compromised or invalid"
+                gained = -0.05
         elif action_type == "block":
             if node:
                 node.detection_risk = 1.0
                 node.is_monitored   = True
                 msg += "Blocked " + node.name + " (det=1.0)"
+                gained = 0.10
             else:
                 msg += "block failed — bad node"
+                gained = -0.05
         else:
             msg += "unknown action '" + action_type + "'"
+            gained = -0.05
+
+        if not hasattr(self, "_defender_reward"):
+            self._defender_reward = 0.0
+        self._defender_reward += gained
 
         return self._build_obs(done=self._done, reward=0.0, success=True, msg=msg)
 
