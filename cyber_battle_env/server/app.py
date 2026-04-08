@@ -165,7 +165,7 @@ def _make_app() -> FastAPI:
         compromised = sum(1 for n in nodes if n.get("is_compromised", False))
         defender_score = round(1.0 - (compromised / max(total_nodes, 1)), 2)
         raw_attacker = getattr(_env, "_total_reward", 0.0)
-        attacker_score = min(round(raw_attacker, 2), 1.00)
+        attacker_score = max(0.00, min(round(raw_attacker, 2), 1.00))
 
         msg = getattr(_env, "_last_msg", "Simulation Active...")
         if getattr(_env, "_done", False):
