@@ -151,6 +151,15 @@ def _make_app() -> FastAPI:
             total_nodes = len(nodes)
             compromised = sum(1 for n in nodes if getattr(n, "is_compromised", False))
             data["defender_score"] = round(1.0 - (compromised / max(total_nodes, 1)), 2)
+        if data.get("task") == "LEVEL_1":
+            _task_report.clear()
+
+        task_id = data.get("task")
+        for i, entry in enumerate(_task_report):
+            if entry.get("task") == task_id:
+                _task_report[i] = data
+                return {"ok": True, "count": len(_task_report)}
+                
         _task_report.append(data)
         return {"ok": True, "count": len(_task_report)}
 

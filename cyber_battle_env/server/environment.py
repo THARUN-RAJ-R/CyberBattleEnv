@@ -52,11 +52,11 @@ NODE_DEFAULTS: Dict[int, Tuple[float, float, float]] = {
     3: (0.30, 0.60, 0.70), # Database — hardened + monitored
 }
 
-# Reward table per node for successful exploit
-EXPLOIT_REWARDS: Dict[int, float] = {0: 0.02, 1: 0.35, 2: 0.25, 3: 0.20}
+# Reward table per node for successful exploit (kept small to prevent score overflow)
+EXPLOIT_REWARDS: Dict[int, float] = {0: 0.01, 1: 0.07, 2: 0.06, 3: 0.05}
 
 # Lateral-move progress rewards
-MOVE_REWARDS: Dict[int, float] = {0: 0.00, 1: 0.05, 2: 0.10, 3: 0.15}
+MOVE_REWARDS: Dict[int, float] = {0: 0.00, 1: 0.02, 2: 0.03, 3: 0.04}
 
 
 # ── Internal node model ───────────────────────────────────────────────────────
@@ -218,7 +218,7 @@ class CyberBattleEnvironment:
             obs.defender_last_action = def_action
             obs.defender_last_target = def_target
 
-        self._total_reward = max(0.00, min(1.00, self._total_reward + step_reward))
+        self._total_reward = max(0.01, min(0.99, self._total_reward + step_reward))
         logger.info(
             "[STEP] turn=%d action=%s@%d reward=%.3f done=%s",
             self._turn, action.action_type, action.target_node,
@@ -283,9 +283,9 @@ class CyberBattleEnvironment:
 
         node.scanned = True
         detected = self._detect(node, stealth=0.8)
-        reward = 0.06 if not node.is_compromised else 0.03
+        reward = 0.03 if not node.is_compromised else 0.01
         if detected:
-            reward = max(0.0, reward - 0.11)
+            reward = max(0.0, reward - 0.05)
 
         msg = (f"Scanned {node.name}: vuln={node.vulnerability_level:.2f}, "
                f"patch={node.patch_level:.2f}, det={node.detection_risk:.2f}")
@@ -323,20 +323,20 @@ class CyberBattleEnvironment:
             msg = f"✗ Exploit failed on {node.name} (p={p_success:.2f})"
 
         if detected:
-            reward -= 0.22
+            reward -= 0.10
             msg += " [DETECTED]"
         elif success:
-            reward += 0.05
+            reward += 0.02
             msg += " [STEALTH BONUS]"
 
         # First 3 levels win condition: web server compromised
         if self.level_num <= 3 and 1 in self._compromised:
-            reward += 0.5
+            reward += 0.08
             self._done = True
             self._winner = "attacker"
             msg += " 🏆 Base Phase complete — Web Server compromised!"
 
-        final_reward = max(-0.2, reward)
+        final_reward = max(-0.08, reward)
         return self._build_obs(done=self._done, reward=final_reward, success=success, msg=msg), final_reward
 
     def _do_lateral_move(self, target: int) -> Tuple[CyberBattleObservation, float]:
@@ -356,15 +356,15 @@ class CyberBattleEnvironment:
         prev = self._attacker_pos
         self._attacker_pos = target
         detected = self._detect(node, stealth=0.6)
-        reward = MOVE_REWARDS.get(target, 0.05)
+        reward = MOVE_REWARDS.get(target, 0.02)
         if detected:
-            reward = max(-0.10, reward - 0.10)
+            reward = max(-0.05, reward - 0.06)
 
         msg = f"Moved {NODE_NAMES[prev]} → {node.name}"
         if detected:
             msg += " [DETECTED]"
         else:
-            reward += 0.05
+            reward += 0.02
             msg += " [GHOST PROTOCOL BONUS]"
         return self._build_obs(done=self._done, reward=reward, success=True, msg=msg), reward
 
@@ -377,7 +377,7 @@ class CyberBattleEnvironment:
 
         node.detection_risk = max(0.0, node.detection_risk - 0.15)
         detected = self._detect(node, stealth=0.5)
-        reward = 0.07 if not detected else 0.02
+        reward = 0.03 if not detected else 0.01
 
         msg = f"Privilege escalation on {node.name}. Detection risk reduced."
         if detected:
@@ -399,14 +399,14 @@ class CyberBattleEnvironment:
         if detected and 4 <= self.level_num <= 6:
             self._done = True
             self._winner = "defender"
-            reward = -0.3
+            reward = -0.10
             msg = "Exfiltration detected! Caught by security team. [DEFENDER WINS]"
         else:
-            reward = 0.7
+            reward = 0.15
             self._done = True
             self._winner = "attacker"
             if detected:
-                reward -= 0.15
+                reward -= 0.05
             msg = f"💀 Data exfiltrated! Task '{self._task}' complete."
             if detected:
                 msg += " (Partial detection during extraction)"
@@ -433,70 +433,70 @@ class CyberBattleEnvironment:
             if node:
                 if node.patch_level >= 1.0:
                     msg += f"Wasteful Time! {node.name} is entirely updated."
-                    gained = -0.06
+                    gained = -0.03
                 else:
                     node.patch_level         = min(1.0, node.patch_level + 0.25)
                     node.vulnerability_level = max(0.0, node.vulnerability_level - 0.20)
                     msg += "Patched " + node.name
-                    gained = 0.12
+                    gained = 0.04
             else:
                 msg += "patch failed — bad node"
-                gained = -0.08
+                gained = -0.03
         elif action_type == "monitor":
             if node:
                 node.is_monitored   = True
                 node.detection_risk = min(1.0, node.detection_risk + 0.25)
                 msg += "Monitoring " + node.name
-                gained = 0.07
+                gained = 0.03
             else:
                 msg += "monitor failed — bad node"
-                gained = -0.08
+                gained = -0.03
         elif action_type == "isolate":
             if node and target_node != 0:
                 node.is_isolated = True
                 if not getattr(node, "is_compromised", False):
                     msg += f"Severe Business Disruption! Isolated clean {node.name}"
-                    gained = -0.15
+                    gained = -0.06
                 else:
                     msg += "Isolated " + node.name
-                    gained = 0.18
+                    gained = 0.06
             else:
                 msg += "isolate failed — invalid target"
-                gained = -0.08
+                gained = -0.03
         elif action_type == "restore":
             if node and target_node != 0:
                 if getattr(node, "is_compromised", False) == False:
                     msg += f"Wasteful response. {node.name} is already clean."
-                    gained = -0.08
+                    gained = -0.03
                 else:
                     node.is_compromised = False
                     if target_node in self._compromised:
                         self._compromised.remove(target_node)
                     msg += "Restored " + node.name
-                    gained = 0.34
+                    gained = 0.09
             else:
                 msg += "restore failed — invalid"
-                gained = -0.08
+                gained = -0.03
         elif action_type == "block":
             if node:
                 node.detection_risk = 1.0
                 node.is_monitored   = True
                 if target_node == 3:
                     msg += "Critical Database Guard! Block active on Vault! "
-                    gained = 0.25
+                    gained = 0.08
                 else:
                     msg += "Blocked " + node.name + " (det=1.0)"
-                    gained = 0.11
+                    gained = 0.04
             else:
                 msg += "block failed — bad node"
-                gained = -0.08
+                gained = -0.03
         else:
             msg += "unknown action '" + action_type + "'"
-            gained = -0.05
+            gained = -0.02
 
         if not hasattr(self, "_defender_reward"):
             self._defender_reward = 0.0
-        self._defender_reward = max(0.00, min(1.00, self._defender_reward + gained))
+        self._defender_reward = max(0.01, min(0.99, self._defender_reward + gained))
 
         return self._build_obs(done=self._done, reward=0.0, success=True, msg=msg)
 

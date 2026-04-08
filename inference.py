@@ -497,7 +497,7 @@ async def main():
                     if ui_req.status_code == 200: def_score = ui_req.json().get("defender_score", 0.0)
             except: pass
 
-            print(f"[END] {task.upper()} | Attacker Score: {score:.2f} | Defender Score: {def_score:.2f} | Status: {status_text}", flush=True)
+            print(f"[END] {task.upper()} | Attacker: {score:.2f} | Defender: {def_score:.2f} | Status: {status_text} | Tracker: {task_rewards}", flush=True)
 
             # POST result to dashboard report store
             try:
