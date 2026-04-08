@@ -144,6 +144,12 @@ def _make_app() -> FastAPI:
     @application.post("/report_task", tags=["meta"])
     async def report_task(data: dict):
         """Called by inference.py after each task completes to log results."""
+        if hasattr(_env, "_nodes") and _env._nodes:
+            nodes = _env._nodes.values()
+            total_nodes = len(nodes)
+            compromised = sum(1 for n in nodes if getattr(n, "is_compromised", False))
+            data["defender_score"] = round(1.0 - (compromised / max(total_nodes, 1)), 2)
+            
         _task_report.append(data)
         return {"ok": True, "count": len(_task_report)}
 

@@ -263,6 +263,9 @@ class CyberBattleEnvironment:
 
         if target not in TOPOLOGY.get(self._attacker_pos, []) and target != self._attacker_pos:
             return self._fail(f"Node {target} not reachable from position {self._attacker_pos}.", -0.02)
+            
+        if getattr(node, "scanned", False):
+            return self._fail(f"Node {target} already scanned. Redundant action.", -0.01)
 
         node.scanned = True
         detected = self._detect(node, stealth=0.8)
