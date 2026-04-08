@@ -139,13 +139,21 @@ def _make_app() -> FastAPI:
 
     @application.get("/ui_state", tags=["meta"])
     async def ui_state():
-        obs = _env.get_observation("attacker")
+        if not hasattr(_env, "_nodes") or not _env._nodes:
+            _env.reset("easy")
+            
+        nodes = [n.to_model().dict() for n in _env._nodes.values()]
+        
+        msg = "Simulation Active..."
+        if getattr(_env, "_done", False):
+            msg = "[SYSTEM] Simulation Terminated. State frozen."
+
         return {
-            "task": _env._task,
-            "total_reward": _env.total_reward,
-            "done": _env.is_game_over,
-            "nodes": [n.dict() for n in obs.nodes],
-            "last_action_message": obs.last_action_message
+            "task": getattr(_env, "_task", "easy"),
+            "total_reward": getattr(_env, "_total_reward", 0.0),
+            "done": getattr(_env, "_done", False),
+            "nodes": nodes,
+            "last_action_message": msg
         }
 
     # ── Defender Step (AI vs AI — hard task) ─────────────────────────────────
