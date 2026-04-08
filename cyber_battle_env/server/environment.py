@@ -205,7 +205,7 @@ class CyberBattleEnvironment:
             obs.defender_last_action = def_action
             obs.defender_last_target = def_target
 
-        self._total_reward += step_reward
+        self._total_reward = max(0.00, min(1.00, self._total_reward + step_reward))
         logger.info(
             "[STEP] turn=%d action=%s@%d reward=%.3f done=%s",
             self._turn, action.action_type, action.target_node,
@@ -270,9 +270,9 @@ class CyberBattleEnvironment:
 
         node.scanned = True
         detected = self._detect(node, stealth=0.8)
-        reward = 0.05 if not node.is_compromised else 0.02
+        reward = 0.06 if not node.is_compromised else 0.03
         if detected:
-            reward = max(0.0, reward - 0.05)
+            reward = max(0.0, reward - 0.11)
 
         msg = (f"Scanned {node.name}: vuln={node.vulnerability_level:.2f}, "
                f"patch={node.patch_level:.2f}, det={node.detection_risk:.2f}")
@@ -306,11 +306,11 @@ class CyberBattleEnvironment:
             reward = EXPLOIT_REWARDS.get(target, 0.2)
             msg = f"✓ Exploit succeeded on {node.name} (p={p_success:.2f})"
         else:
-            reward = -0.03
+            reward = -0.04
             msg = f"✗ Exploit failed on {node.name} (p={p_success:.2f})"
 
         if detected:
-            reward -= 0.15
+            reward -= 0.22
             msg += " [DETECTED]"
 
         # Task 1 win: web server compromised
@@ -415,52 +415,52 @@ class CyberBattleEnvironment:
                 node.patch_level         = min(1.0, node.patch_level + 0.25)
                 node.vulnerability_level = max(0.0, node.vulnerability_level - 0.20)
                 msg += "Patched " + node.name
-                gained = 0.10
+                gained = 0.12
             else:
                 msg += "patch failed — bad node"
-                gained = -0.05
+                gained = -0.08
         elif action_type == "monitor":
             if node:
                 node.is_monitored   = True
                 node.detection_risk = min(1.0, node.detection_risk + 0.25)
                 msg += "Monitoring " + node.name
-                gained = 0.05
+                gained = 0.07
             else:
                 msg += "monitor failed — bad node"
-                gained = -0.05
+                gained = -0.08
         elif action_type == "isolate":
             if node and target_node != 0:
                 node.is_isolated = True
                 msg += "Isolated " + node.name
-                gained = 0.15
+                gained = 0.18
             else:
                 msg += "isolate failed — invalid target"
-                gained = -0.05
+                gained = -0.08
         elif action_type == "restore":
             if node and target_node in self._compromised and target_node != 0:
                 node.is_compromised = False
                 self._compromised.remove(target_node)
                 msg += "Restored " + node.name
-                gained = 0.30
+                gained = 0.34
             else:
                 msg += "restore failed — not compromised or invalid"
-                gained = -0.05
+                gained = -0.08
         elif action_type == "block":
             if node:
                 node.detection_risk = 1.0
                 node.is_monitored   = True
                 msg += "Blocked " + node.name + " (det=1.0)"
-                gained = 0.10
+                gained = 0.11
             else:
                 msg += "block failed — bad node"
-                gained = -0.05
+                gained = -0.08
         else:
             msg += "unknown action '" + action_type + "'"
             gained = -0.05
 
         if not hasattr(self, "_defender_reward"):
             self._defender_reward = 0.0
-        self._defender_reward += gained
+        self._defender_reward = max(0.00, min(1.00, self._defender_reward + gained))
 
         return self._build_obs(done=self._done, reward=0.0, success=True, msg=msg)
 

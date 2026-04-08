@@ -145,7 +145,7 @@ def _make_app() -> FastAPI:
     async def report_task(data: dict):
         """Called by inference.py after each task completes to log results."""
         if hasattr(_env, "_defender_reward"):
-            data["defender_score"] = max(0.00, min(round(_env._defender_reward, 2), 1.00))
+            data["defender_score"] = round(_env._defender_reward, 2)
         elif hasattr(_env, "_nodes") and _env._nodes:
             nodes = _env._nodes.values()
             total_nodes = len(nodes)
@@ -161,11 +161,9 @@ def _make_app() -> FastAPI:
 
         nodes = [n.to_model().dict() for n in _env._nodes.values()]
 
-        # Dynamically scale Defender performance using tracking reward
-        raw_defender = getattr(_env, "_defender_reward", 0.0)
-        defender_score = max(0.00, min(round(raw_defender, 2), 1.00))
-        raw_attacker = getattr(_env, "_total_reward", 0.0)
-        attacker_score = max(0.00, min(round(raw_attacker, 2), 1.00))
+        # Use strict organic natively bounded constraints
+        defender_score = round(getattr(_env, "_defender_reward", 0.0), 2)
+        attacker_score = round(getattr(_env, "_total_reward", 0.0), 2)
 
         msg = getattr(_env, "_last_msg", "Simulation Active...")
         if getattr(_env, "_done", False):
