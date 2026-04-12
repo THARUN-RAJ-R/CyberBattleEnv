@@ -13,3 +13,4 @@ venv/
 .vscode/
 *.log
 _test_*.py
+.pytest_cache/
